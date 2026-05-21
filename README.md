@@ -15,6 +15,12 @@ Features:
 
 The owner UUID is hardcoded to `832d4208-3793-4650-ba7b-5ce9a7fe4928`. Owner commands and the private client bridge only show and execute for that UUID; OP status and config edits do not grant owner access.
 
+Build:
+
+- Install Java 21 and Gradle 9.4.0 or newer.
+- Put the Cobblemon Fabric 1.7.3 jar at the path in `gradle.properties`, or change `cobblemon_jar` to your local jar path.
+- Run `gradle build`.
+
 Commands:
 
 - `/cach active <on|off>` lets a target player control achievement availability.
