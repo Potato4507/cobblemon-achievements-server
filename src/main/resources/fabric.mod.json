@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "cobblemon_achievements_server",
+  "version": "${version}",
+  "name": "Cobblemon Achievements Server",
+  "description": "Server-side configurable player defeat achievements, owned Pokemon snapshots, and owner-only Cobblemon admin commands.",
+  "authors": ["dwdow"],
+  "license": "MIT",
+  "environment": "server",
+  "entrypoints": {
+    "main": [
+      "dev.dwdow.cobbleachievements.CobbleAchievementsMod"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "1.21.1",
+    "fabric-api": "*",
+    "fabric-language-kotlin": "*",
+    "cobblemon": ">=1.7.3"
+  }
+}
