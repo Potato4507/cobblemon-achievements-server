@@ -12,6 +12,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.security.KeyFactory;
 import java.security.MessageDigest;
 import java.security.PublicKey;
@@ -36,11 +37,11 @@ public final class RemoteManifestClient {
 
     public static Status refresh(AchievementConfig config) {
         if (!config.remoteManifestEnabled) {
-            status = new Status(false, Instant.now().toString(), "", "", "", "remote manifest disabled");
+            status = new Status(false, Instant.now().toString(), "", installedVersion(), "", "", "", false, false, "remote manifest disabled");
             return status;
         }
         if (config.remoteManifestUrls.isEmpty()) {
-            status = new Status(false, Instant.now().toString(), "", "", "", "no remote manifest URLs configured");
+            status = new Status(false, Instant.now().toString(), "", installedVersion(), "", "", "", false, false, "no remote manifest URLs configured");
             return status;
         }
         for (String url : config.remoteManifestUrls) {
@@ -50,7 +51,7 @@ public final class RemoteManifestClient {
                 status = refreshed;
                 return refreshed;
             } catch (Exception error) {
-                status = new Status(false, Instant.now().toString(), url.trim(), "", "", error.getMessage());
+                status = new Status(false, Instant.now().toString(), url.trim(), installedVersion(), "", "", "", false, false, error.getMessage());
             }
         }
         return status;
@@ -66,6 +67,7 @@ public final class RemoteManifestClient {
             throw new IllegalStateException("manifest HTTP " + response.statusCode());
         }
 
+        String manifestSha256 = sha256(response.body().getBytes(StandardCharsets.UTF_8));
         JsonObject envelope = JsonParser.parseString(response.body()).getAsJsonObject();
         byte[] payloadBytes = Base64.getDecoder().decode(envelope.get("payloadBase64").getAsString());
         byte[] signatureBytes = Base64.getDecoder().decode(envelope.get("signatureBase64").getAsString());
@@ -74,13 +76,18 @@ public final class RemoteManifestClient {
         JsonObject payload = JsonParser.parseString(new String(payloadBytes, StandardCharsets.UTF_8)).getAsJsonObject();
         Path cacheDir = cacheDir();
         Files.createDirectories(cacheDir);
+        String previousManifestSha256 = read(cacheDir.resolve("manifest.sha256"));
+        boolean manifestChanged = !manifestSha256.equals(previousManifestSha256);
         Files.writeString(cacheDir.resolve("manifest.payload.json"), new String(payloadBytes, StandardCharsets.UTF_8) + "\n", StandardCharsets.UTF_8);
+        Files.writeString(cacheDir.resolve("manifest.sha256"), manifestSha256 + "\n", StandardCharsets.UTF_8);
         cacheDataFiles(cacheDir, payload);
-        String downloaded = config.remoteUpdateDownloadEnabled ? downloadUpdate(cacheDir, payload) : "";
+        UpdateResult update = manifestChanged && config.remoteUpdateDownloadEnabled ? downloadUpdate(cacheDir, payload) : UpdateResult.none();
 
+        String installed = installedVersion();
         String version = string(payload, "latestModVersion");
-        String message = string(payload, "message");
-        return new Status(true, Instant.now().toString(), url, version, downloaded, message);
+        boolean updateAvailable = !version.isBlank() && !version.equals(installed);
+        String message = statusMessage(string(payload, "message"), manifestChanged, update);
+        return new Status(true, Instant.now().toString(), url, installed, version, update.downloadedPath, update.installedPath, manifestChanged, updateAvailable, message);
     }
 
     private static void verify(byte[] payloadBytes, byte[] signatureBytes) throws Exception {
@@ -111,10 +118,10 @@ public final class RemoteManifestClient {
         }
     }
 
-    private static String downloadUpdate(Path cacheDir, JsonObject payload) throws Exception {
+    private static UpdateResult downloadUpdate(Path cacheDir, JsonObject payload) throws Exception {
         String downloadUrl = string(payload, "downloadUrl");
-        if (downloadUrl.isBlank()) return "";
-        byte[] bytes = downloadBytes(downloadUrl);
+        byte[] bytes = downloadUrl.isBlank() ? downloadChunkedBase64(payload) : downloadBytes(downloadUrl);
+        if (bytes.length == 0) return UpdateResult.none();
         String expected = string(payload, "downloadSha256");
         if (!expected.isBlank() && !expected.equalsIgnoreCase(sha256(bytes))) {
             throw new SecurityException("downloadSha256 mismatch");
@@ -123,7 +130,42 @@ public final class RemoteManifestClient {
         Files.createDirectories(updatesDir);
         Path jar = updatesDir.resolve("cobblemon-achievements-server-latest.jar");
         Files.write(jar, bytes);
-        return jar.toString();
+        return new UpdateResult(jar.toString(), tryInstallUpdate(jar));
+    }
+
+    private static String tryInstallUpdate(Path downloadedJar) {
+        try {
+            Path currentJar = currentModJar();
+            if (currentJar == null) return "";
+            Files.copy(downloadedJar, currentJar, StandardCopyOption.REPLACE_EXISTING);
+            return currentJar.toString();
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private static byte[] downloadChunkedBase64(JsonObject payload) throws Exception {
+        if (!payload.has("downloadBase64Chunks") || !payload.get("downloadBase64Chunks").isJsonArray()) return new byte[0];
+        StringBuilder encoded = new StringBuilder();
+        JsonArray chunks = payload.getAsJsonArray("downloadBase64Chunks");
+        for (int i = 0; i < chunks.size(); i++) {
+            String url = chunks.get(i).getAsString();
+            if (url == null || url.isBlank()) continue;
+            encoded.append(new String(downloadBytes(url), StandardCharsets.UTF_8).replaceAll("\\s+", ""));
+        }
+        return encoded.isEmpty() ? new byte[0] : Base64.getDecoder().decode(encoded.toString());
+    }
+
+    private static Path currentModJar() {
+        try {
+            return FabricLoader.getInstance().getModContainer(CobbleAchievementsMod.MOD_ID)
+                .flatMap(container -> container.getOrigin().getPaths().stream()
+                    .filter(path -> Files.isRegularFile(path) && path.getFileName().toString().endsWith(".jar"))
+                    .findFirst())
+                .orElse(null);
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private static byte[] downloadBytes(String url) throws Exception {
@@ -142,6 +184,20 @@ public final class RemoteManifestClient {
         return FabricLoader.getInstance().getGameDir().resolve("cobblemon-achievements-remote");
     }
 
+    private static String installedVersion() {
+        return FabricLoader.getInstance().getModContainer(CobbleAchievementsMod.MOD_ID)
+            .map(container -> container.getMetadata().getVersion().getFriendlyString())
+            .orElse("");
+    }
+
+    private static String read(Path path) {
+        try {
+            return Files.exists(path) ? Files.readString(path, StandardCharsets.UTF_8).trim() : "";
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
     private static String sha256(byte[] bytes) throws Exception {
         return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
     }
@@ -155,9 +211,23 @@ public final class RemoteManifestClient {
         return value == null ? "" : value.toLowerCase().replaceAll("[^a-z0-9._-]+", "_");
     }
 
-    public record Status(boolean ok, String checkedAt, String sourceUrl, String latestModVersion, String downloadedUpdatePath, String message) {
+    private static String statusMessage(String remoteMessage, boolean manifestChanged, UpdateResult update) {
+        String message = remoteMessage == null || remoteMessage.isBlank() ? "remote manifest verified" : remoteMessage;
+        if (!manifestChanged) return message + " | no GitHub manifest change";
+        if (!update.downloadedPath.isBlank() && !update.installedPath.isBlank()) return message + " | update installed; restart required";
+        if (!update.downloadedPath.isBlank()) return message + " | update downloaded; manual jar swap may be needed before restart";
+        return message + " | GitHub manifest changed";
+    }
+
+    private record UpdateResult(String downloadedPath, String installedPath) {
+        private static UpdateResult none() {
+            return new UpdateResult("", "");
+        }
+    }
+
+    public record Status(boolean ok, String checkedAt, String sourceUrl, String installedModVersion, String latestModVersion, String downloadedUpdatePath, String installedUpdatePath, boolean manifestChanged, boolean updateAvailable, String message) {
         private static Status initial() {
-            return new Status(false, "", "", "", "", "not checked yet");
+            return new Status(false, "", "", installedVersion(), "", "", "", false, false, "not checked yet");
         }
     }
 }

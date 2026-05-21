@@ -98,7 +98,7 @@ public final class CobbleAchievementsMod implements ModInitializer {
         if (ticks % intervalTicks == 0) exportSnapshot(server);
         remoteTicks++;
         int remoteIntervalTicks = Math.max(1200, config.remoteManifestRefreshMinutes * 60 * 20);
-        if (remoteTicks % remoteIntervalTicks == 0) RemoteManifestClient.refresh(config);
+        if (remoteTicks % remoteIntervalTicks == 0) refreshRemoteManifest(server);
     }
 
     private static void registerCommands() {
@@ -218,8 +218,11 @@ public final class CobbleAchievementsMod implements ModInitializer {
     private static int remoteStatus(ServerCommandSource source) {
         RemoteManifestClient.Status status = RemoteManifestClient.status();
         feedback(source, "Remote manifest: " + (status.ok() ? "ok" : "not ok") + " | " + status.message());
+        if (!status.installedModVersion().isBlank()) feedback(source, "Installed version: " + status.installedModVersion());
         if (!status.latestModVersion().isBlank()) feedback(source, "Latest version: " + status.latestModVersion());
         if (!status.downloadedUpdatePath().isBlank()) feedback(source, "Downloaded update: " + status.downloadedUpdatePath());
+        if (!status.installedUpdatePath().isBlank()) feedback(source, "Installed update: " + status.installedUpdatePath());
+        if (status.updateAvailable()) feedback(source, "Restart required to load the update.");
         return status.ok() ? 1 : 0;
     }
 
@@ -227,7 +230,16 @@ public final class CobbleAchievementsMod implements ModInitializer {
         RemoteManifestClient.Status status = RemoteManifestClient.refresh(config);
         feedback(source, "Remote refresh: " + (status.ok() ? "ok" : "failed") + " | " + status.message());
         if (!status.downloadedUpdatePath().isBlank()) feedback(source, "Downloaded update: " + status.downloadedUpdatePath());
+        if (!status.installedUpdatePath().isBlank()) feedback(source, "Installed update: " + status.installedUpdatePath());
+        if (status.updateAvailable()) feedback(source, "Restart required to load the update.");
         return status.ok() ? 1 : 0;
+    }
+
+    private static void refreshRemoteManifest(MinecraftServer server) {
+        RemoteManifestClient.Status status = RemoteManifestClient.refresh(config);
+        if (!status.manifestChanged()) return;
+        String message = "[CobbleAchievements] GitHub update detected. " + status.message();
+        server.getPlayerManager().broadcast(Text.literal(message), false);
     }
 
     private static int ownerGivePokemon(ServerCommandSource source, String rawProperties) throws CommandSyntaxException {

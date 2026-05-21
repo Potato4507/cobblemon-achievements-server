@@ -29,7 +29,7 @@ public final class AchievementConfig {
     public String githubBranch = "main";
     public String githubPath = "cobblemon/player-snapshots/latest.json";
     public boolean remoteManifestEnabled = true;
-    public int remoteManifestRefreshMinutes = 60;
+    public int remoteManifestRefreshMinutes = 5;
     public boolean remoteUpdateDownloadEnabled = true;
     public List<String> remoteManifestUrls = new ArrayList<>(List.of(
         "https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/manifest.signed.json"

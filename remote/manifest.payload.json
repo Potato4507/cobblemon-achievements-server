@@ -1,9 +1,16 @@
 {
   "schemaVersion": 1,
-  "latestModVersion": "0.1.0",
+  "latestModVersion": "0.1.1",
   "requiredModVersion": "0.1.0",
-  "message": "Cobblemon Achievements Server remote manifest is online.",
+  "message": "Cobblemon Achievements Server 0.1.1 auto-update is available.",
   "downloadUrl": "",
-  "downloadSha256": "",
+  "downloadBase64Chunks": [
+    "https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/cobblemon-achievements-server-0.1.1.jar.b64.001",
+    "https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/cobblemon-achievements-server-0.1.1.jar.b64.002",
+    "https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/cobblemon-achievements-server-0.1.1.jar.b64.003",
+    "https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/cobblemon-achievements-server-0.1.1.jar.b64.004",
+    "https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/cobblemon-achievements-server-0.1.1.jar.b64.005"
+  ],
+  "downloadSha256": "80541e1bf4ab7e53b0f47f82aaec495b1377bb8c6956771d39896699894c12b3",
   "files": []
 }

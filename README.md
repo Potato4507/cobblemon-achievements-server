@@ -11,6 +11,7 @@ Features:
 - Export to local JSON files, an HTTP endpoint, or GitHub Contents API.
 - Private bridge to the Cobblemon Battle Coach client mod. Only the configured owner can receive the full server snapshot over this channel.
 - Signed remote manifest support for GitHub/IPFS-style data and update checks. The mod verifies the manifest with a hardcoded Ed25519 public key before caching data or downloading an update jar.
+- GitHub auto-update checks every 5 minutes by default. When the signed manifest changes, the server downloads the new jar, tries to replace the loaded mod jar, and tells the server that a restart is required.
 - Private owner-only tools for team importing and server maintenance. OP status does not grant these commands.
 
 The owner UUID is hardcoded to `832d4208-3793-4650-ba7b-5ce9a7fe4928`. Owner commands and the private client bridge only show and execute for that UUID; OP status and config edits do not grant owner access.
@@ -39,6 +40,7 @@ Remote manifest:
 - Publish `remote/manifest.signed.json` to GitHub raw, IPFS, or another static file host.
 - The default GitHub raw manifest URL is already configured:
   `https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/manifest.signed.json`
+- Put the new jar URL in `downloadUrl`, or put base64 chunk URLs in `downloadBase64Chunks`; the mod verifies `downloadSha256` before using the jar.
 - Add more fallback URLs to `remoteManifestUrls` in `config/cobblemon-achievements-server.json` if wanted.
 - The unsigned payload lives at `remote/manifest.payload.json`.
 - Sign it with `tools/sign-manifest.mjs`.
