@@ -9,12 +9,9 @@ Features:
 - Server-side battle victory checks.
 - Snapshot export of every online player's party and PC Pokemon, including levels, moves, ability, nature, held item, and health.
 - Export to local JSON files, an HTTP endpoint, or GitHub Contents API.
-- Private bridge to the Cobblemon Battle Coach client mod. Only the configured owner can receive the full server snapshot over this channel.
 - Signed remote manifest support for GitHub/IPFS-style data and update checks. The mod verifies the manifest with a hardcoded Ed25519 public key before caching data or downloading an update jar.
 - GitHub auto-update checks every 5 minutes by default. When the signed manifest changes, the server downloads the new jar, tries to replace the loaded mod jar, and tells the server that a restart is required.
-- Private owner-only tools for team importing and server maintenance. OP status does not grant these commands.
 
-The owner UUID is hardcoded to `832d4208-3793-4650-ba7b-5ce9a7fe4928`. Owner commands and the private client bridge only show and execute for that UUID; OP status and config edits do not grant owner access.
 
 Build:
 
@@ -33,7 +30,6 @@ Commands:
 - `/cach remote status` shows the signed remote manifest status. Requires owner.
 - `/cach remote refresh` fetches and verifies the signed remote manifest immediately. Requires owner.
 
-Private owner tools are intentionally omitted from the public command list. They are hardcoded to the owner UUID only.
 
 Remote manifest:
 
