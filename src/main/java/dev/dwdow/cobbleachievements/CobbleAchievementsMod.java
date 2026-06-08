@@ -200,7 +200,7 @@ public final class CobbleAchievementsMod implements ModInitializer {
 
     private static int setActive(ServerCommandSource source, boolean active) throws CommandSyntaxException {
         ServerPlayerEntity player = source.getPlayerOrThrow();
-        AchievementConfig.TargetConfig target = config.targets.get(player.getUuidAsString());
+        AchievementConfig.TargetConfig target = targetForPlayer(player);
         if (target == null) {
             feedback(source, "You are not configured as an achievement target.");
             return 0;
@@ -232,7 +232,7 @@ public final class CobbleAchievementsMod implements ModInitializer {
             return 1;
         }
         for (AchievementConfig.TargetConfig target : config.targets.values()) {
-            feedback(source, target.name + " -> " + target.achievementId + " (" + (target.active ? "active" : "inactive") + ")");
+            feedback(source, target.name + " -> " + target.title + " (" + (target.active ? "active" : "inactive") + ", id " + target.achievementId + ")");
         }
         return 1;
     }
@@ -251,6 +251,19 @@ public final class CobbleAchievementsMod implements ModInitializer {
                     addAchievement(context.getSource(), StringArgumentType.getString(context, "player"), ""))
                     .then(argument("title", StringArgumentType.greedyString()).executes(context ->
                         addAchievement(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "title"))))))
+            .then(literal("create").requires(config::canManageTargets)
+                .then(argument("player", StringArgumentType.word()).executes(context ->
+                    addAchievement(context.getSource(), StringArgumentType.getString(context, "player"), ""))
+                    .then(argument("title", StringArgumentType.greedyString()).executes(context ->
+                        addAchievement(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "title"))))))
+            .then(literal("title").requires(config::canManageTargets)
+                .then(argument("player", StringArgumentType.word())
+                    .then(argument("title", StringArgumentType.greedyString()).executes(context ->
+                        addAchievement(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "title"))))))
+            .then(literal("rename").requires(config::canManageTargets)
+                .then(argument("player", StringArgumentType.word())
+                    .then(argument("title", StringArgumentType.greedyString()).executes(context ->
+                        addAchievement(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "title"))))))
             .then(literal("id").requires(config::canManageTargets)
                 .then(argument("player", StringArgumentType.word())
                     .then(argument("id", StringArgumentType.word()).executes(context ->
@@ -263,11 +276,28 @@ public final class CobbleAchievementsMod implements ModInitializer {
             .then(literal("rm").requires(config::canManageTargets)
                 .then(argument("player", StringArgumentType.word()).executes(context ->
                     removeAchievement(context.getSource(), StringArgumentType.getString(context, "player")))))
+            .then(literal("delete").requires(config::canManageTargets)
+                .then(argument("player", StringArgumentType.word()).executes(context ->
+                    removeAchievement(context.getSource(), StringArgumentType.getString(context, "player")))))
+            .then(literal("clear").requires(config::canManageTargets)
+                .then(argument("player", StringArgumentType.word()).executes(context ->
+                    removeAchievement(context.getSource(), StringArgumentType.getString(context, "player")))))
             .then(literal("list").requires(config::canManageTargets).executes(context -> listTargets(context.getSource())))
             .then(literal("ls").requires(config::canManageTargets).executes(context -> listTargets(context.getSource())))
+            .then(literal("targets").requires(config::canManageTargets).executes(context -> listTargets(context.getSource())))
             .then(literal("status").executes(context -> achievementStatus(context.getSource())))
+            .then(literal("info").executes(context -> achievementStatus(context.getSource())))
+            .then(literal("me").executes(context -> achievementStatus(context.getSource())))
             .then(literal("on").executes(context -> setActive(context.getSource(), true)))
-            .then(literal("off").executes(context -> setActive(context.getSource(), false)));
+            .then(literal("enable").executes(context -> setActive(context.getSource(), true)))
+            .then(literal("active").executes(context -> setActive(context.getSource(), true)))
+            .then(literal("off").executes(context -> setActive(context.getSource(), false)))
+            .then(literal("disable").executes(context -> setActive(context.getSource(), false)))
+            .then(literal("inactive").executes(context -> setActive(context.getSource(), false)))
+            .then(argument("player", StringArgumentType.word()).requires(config::canManageTargets).executes(context ->
+                addAchievement(context.getSource(), StringArgumentType.getString(context, "player"), ""))
+                .then(argument("title", StringArgumentType.greedyString()).executes(context ->
+                    addAchievement(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "title")))));
     }
 
     private static int achievementHelp(ServerCommandSource source) {
@@ -276,14 +306,17 @@ public final class CobbleAchievementsMod implements ModInitializer {
         feedback(source, "/ach remove <player> - remove that achievement target. OP only.");
         feedback(source, "/ach list - show achievement targets. OP only.");
         feedback(source, "/ach status - show your achievement target status.");
-        feedback(source, "/ach on or /ach off - let people earn or stop earning your achievement.");
+        feedback(source, "/ach on/off - let people earn or stop earning your achievement.");
         feedback(source, "Example: /ach add Steve Defeated the Ground Gym Leader");
+        feedback(source, "Even shorter: /ach Steve Defeated the Ground Gym Leader");
+        feedback(source, "Titles can have spaces. Quotes are optional and will be cleaned.");
         feedback(source, "Advanced: /ach id <player> <id> [title]. You usually do not need this.");
         return 1;
     }
 
     private static int addAchievement(ServerCommandSource source, String rawPlayerName, String rawTitle) {
         PlayerTarget targetPlayer = playerTarget(source, rawPlayerName);
+        String title = cleanTitle(rawTitle);
         AchievementConfig.TargetConfig target = existingTarget(targetPlayer);
         if (target == null) {
             target = new AchievementConfig.TargetConfig();
@@ -294,7 +327,7 @@ public final class CobbleAchievementsMod implements ModInitializer {
         if (target.achievementId == null || target.achievementId.isBlank()) {
             target.achievementId = AchievementConfig.TargetConfig.simpleId(target.name);
         }
-        target.title = rawTitle == null || rawTitle.isBlank() ? "Defeated " + target.name : rawTitle;
+        target.title = title.isBlank() ? "Defeated " + target.name : title;
         target.active = true;
         putAchievementTarget(targetPlayer, target);
         config.save();
@@ -304,6 +337,7 @@ public final class CobbleAchievementsMod implements ModInitializer {
 
     private static int setAchievementId(ServerCommandSource source, String rawPlayerName, String rawId, String rawTitle) {
         PlayerTarget targetPlayer = playerTarget(source, rawPlayerName);
+        String title = cleanTitle(rawTitle);
         AchievementConfig.TargetConfig target = existingTarget(targetPlayer);
         if (target == null) {
             target = new AchievementConfig.TargetConfig();
@@ -312,7 +346,7 @@ public final class CobbleAchievementsMod implements ModInitializer {
         target.uuid = targetPlayer.uuid();
         target.name = targetPlayer.name();
         target.achievementId = AchievementConfig.TargetConfig.simpleId(rawId);
-        if (rawTitle != null && !rawTitle.isBlank()) target.title = rawTitle;
+        if (!title.isBlank()) target.title = title;
         if (target.title == null || target.title.isBlank()) target.title = "Defeated " + target.name;
         target.active = true;
         putAchievementTarget(targetPlayer, target);
@@ -323,9 +357,10 @@ public final class CobbleAchievementsMod implements ModInitializer {
 
     private static int removeAchievement(ServerCommandSource source, String rawPlayerName) {
         PlayerTarget target = playerTarget(source, rawPlayerName);
+        boolean existed = existingTarget(target) != null;
         removeAchievementTarget(target);
         config.save();
-        feedback(source, "Removed achievement target for " + target.name() + ".");
+        feedback(source, existed ? "Removed achievement target for " + target.name() + "." : "No achievement target was set for " + target.name() + ".");
         return 1;
     }
 
@@ -363,12 +398,30 @@ public final class CobbleAchievementsMod implements ModInitializer {
     }
 
     private static PlayerTarget playerTarget(ServerCommandSource source, String rawPlayerName) {
-        String name = rawPlayerName == null || rawPlayerName.isBlank() ? "player" : rawPlayerName;
+        String name = cleanCommandText(rawPlayerName);
+        if (name.isBlank()) name = "player";
         ServerPlayerEntity online = onlinePlayer(source, name);
         if (online != null) {
             return new PlayerTarget(online.getUuidAsString(), online.getUuidAsString(), online.getGameProfile().getName(), online);
         }
         return new PlayerTarget("name:" + AchievementConfig.TargetConfig.simpleId(name), "", name, null);
+    }
+
+    private static String cleanTitle(String rawTitle) {
+        return cleanCommandText(rawTitle);
+    }
+
+    private static String cleanCommandText(String value) {
+        if (value == null) return "";
+        String cleaned = value.trim().replaceAll("\\s+", " ");
+        if (cleaned.length() >= 2) {
+            char first = cleaned.charAt(0);
+            char last = cleaned.charAt(cleaned.length() - 1);
+            if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+                cleaned = cleaned.substring(1, cleaned.length() - 1).trim().replaceAll("\\s+", " ");
+            }
+        }
+        return cleaned;
     }
 
     private static AchievementConfig.TargetConfig existingTarget(PlayerTarget target) {

@@ -48,7 +48,7 @@ $env:Path = "$env:JAVA_HOME\bin;$env:Path"
 Install the built jar:
 
 ```powershell
-Copy-Item .\build\libs\cobblemon-achievements-server-0.1.3.jar "C:\Path\To\Your\Server\mods\"
+Copy-Item .\build\libs\cobblemon-achievements-server-0.1.4.jar "C:\Path\To\Your\Server\mods\"
 ```
 
 Then restart the Minecraft server. Do not put this jar in every player's client mods folder; this is a server-side mod.
@@ -104,28 +104,39 @@ Use `/ach help` in-game for the quick achievement guide.
 
 ```mcfunction
 /ach help
+/ach <player> [title]
 /ach add <player> [title]
+/ach set <player> [title]
+/ach title <player> <title>
 /ach remove <player>
 /ach list
 /ach status
 /ach on
 /ach off
+/ach enable
+/ach disable
 ```
 
 Examples:
 
 ```mcfunction
+/ach Steve
+/ach Steve Defeated the Ground Gym Leader
 /ach add Steve
 /ach add Steve Defeated the Ground Gym Leader
+/ach title Steve "Defeated the Ground Gym Leader"
 /ach remove Steve
 ```
 
 Command notes:
 
 - `/ach add <player> [title]` creates the achievement people earn by beating that player.
+- `/ach <player> [title]` is the shortest OP setup form.
+- Titles can have spaces. Quotes are optional; `/ach title Steve "Ground Gym Badge"` and `/ach title Steve Ground Gym Badge` both work.
+- Extra spaces around titles are cleaned up automatically.
 - You usually do not need to set an achievement ID. The mod makes one automatically.
 - `/ach add`, `/ach remove`, and `/ach list` require OP.
-- `/ach on` and `/ach off` let a configured target player control whether people can earn their achievement.
+- `/ach on`, `/ach off`, `/ach enable`, and `/ach disable` let a configured target player control whether people can earn their achievement.
 - Achievement commands accept normal player names. If the player is offline, the target migrates to their UUID when they next battle.
 - Advanced ID override: `/ach id <player> <id> [title]`.
 
