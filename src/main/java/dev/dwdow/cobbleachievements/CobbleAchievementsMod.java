@@ -10,6 +10,7 @@ import com.cobblemon.mod.common.api.storage.party.PlayerPartyStore;
 import com.cobblemon.mod.common.entity.pokemon.PokemonEntity;
 import com.cobblemon.mod.common.pokemon.Pokemon;
 import com.google.gson.JsonObject;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -94,6 +95,7 @@ public final class CobbleAchievementsMod implements ModInitializer {
     private static void tick(MinecraftServer server) {
         currentServer = server;
         ticks++;
+        if (ticks % 100 == 0) PlayerBadgeManager.applyAll(server, config);
         int intervalTicks = Math.max(20, config.snapshotIntervalSeconds * 20);
         if (ticks % intervalTicks == 0) exportSnapshot(server);
         remoteTicks++;
@@ -102,11 +104,12 @@ public final class CobbleAchievementsMod implements ModInitializer {
     }
 
     private static void registerCommands() {
-        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> dispatcher.register(
-            literal("cach")
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
+            dispatcher.register(literal("cach")
                 .then(literal("reload").requires(config::canManageTargets).executes(context -> {
                     config = AchievementConfig.load();
                     state = AchievementState.load();
+                    PlayerBadgeManager.applyAll(context.getSource().getServer(), config);
                     feedback(context.getSource(), "Reloaded " + AchievementConfig.path());
                     return 1;
                 }))
@@ -125,6 +128,7 @@ public final class CobbleAchievementsMod implements ModInitializer {
                     .then(literal("remove").then(argument("player", EntityArgumentType.player()).executes(context ->
                         removeTarget(context.getSource(), EntityArgumentType.getPlayer(context, "player")))))
                     .then(literal("list").executes(context -> listTargets(context.getSource()))))
+                .then(badgeCommand("badge").requires(config::canManageTargets))
                 .then(literal("snapshot")
                     .then(literal("now").requires(config::canManageTargets).executes(context -> {
                         exportSnapshot(context.getSource().getServer());
@@ -158,7 +162,11 @@ public final class CobbleAchievementsMod implements ModInitializer {
                     .then(literal("catchnear").executes(context -> ownerCatchNear(context.getSource(), 16))
                         .then(argument("radius", IntegerArgumentType.integer(1, 128)).executes(context ->
                             ownerCatchNear(context.getSource(), IntegerArgumentType.getInteger(context, "radius"))))))
-        ));
+            );
+            dispatcher.register(badgeCommand("badge").requires(config::canManageTargets));
+            dispatcher.register(badgeCommand("b").requires(config::canManageTargets));
+            dispatcher.register(badgeCommand("typebadge").requires(config::canManageTargets));
+        });
     }
 
     private static int setActive(ServerCommandSource source, boolean active) throws CommandSyntaxException {
@@ -197,6 +205,137 @@ public final class CobbleAchievementsMod implements ModInitializer {
         for (AchievementConfig.TargetConfig target : config.targets.values()) {
             feedback(source, target.name + " -> " + target.achievementId + " (" + (target.active ? "active" : "inactive") + ")");
         }
+        return 1;
+    }
+
+    private static LiteralArgumentBuilder<ServerCommandSource> badgeCommand(String name) {
+        return literal(name)
+            .executes(context -> badgeHelp(context.getSource()))
+            .then(literal("help").executes(context -> badgeHelp(context.getSource())))
+            .then(literal("types").executes(context -> badgeTypes(context.getSource())))
+            .then(literal("set")
+                .then(argument("player", EntityArgumentType.player())
+                    .then(argument("type", StringArgumentType.word()).executes(context ->
+                        setBadge(context.getSource(), EntityArgumentType.getPlayer(context, "player"), StringArgumentType.getString(context, "type"))))))
+            .then(literal("clear")
+                .then(argument("player", EntityArgumentType.player()).executes(context ->
+                    clearBadge(context.getSource(), EntityArgumentType.getPlayer(context, "player")))))
+            .then(literal("remove")
+                .then(argument("player", EntityArgumentType.player()).executes(context ->
+                    clearBadge(context.getSource(), EntityArgumentType.getPlayer(context, "player")))))
+            .then(gymBadgeCommand("gym"))
+            .then(gymBadgeCommand("leader"))
+            .then(literal("list").executes(context -> listBadges(context.getSource())))
+            .then(literal("ls").executes(context -> listBadges(context.getSource())))
+            .then(literal("apply").executes(context -> applyBadges(context.getSource())));
+    }
+
+    private static LiteralArgumentBuilder<ServerCommandSource> gymBadgeCommand(String name) {
+        return literal(name)
+            .then(argument("player", EntityArgumentType.player())
+                .then(literal("on").executes(context ->
+                    setGymBadge(context.getSource(), EntityArgumentType.getPlayer(context, "player"), true, ""))
+                    .then(argument("type", StringArgumentType.word()).executes(context ->
+                        setGymBadge(context.getSource(), EntityArgumentType.getPlayer(context, "player"), true, StringArgumentType.getString(context, "type")))))
+                .then(literal("off").executes(context ->
+                    setGymBadge(context.getSource(), EntityArgumentType.getPlayer(context, "player"), false, ""))));
+    }
+
+    private static int badgeHelp(ServerCommandSource source) {
+        feedback(source, "Badge help:");
+        feedback(source, "/b set <player> <type> - set a player's type badge.");
+        feedback(source, "/b gym <player> on [type] - mark a player as a gym leader.");
+        feedback(source, "/b gym <player> off - remove the gym leader tag.");
+        feedback(source, "/b clear <player> - remove all badge tags from a player.");
+        feedback(source, "/b list - show saved badges.");
+        feedback(source, "/b types - show valid Pokemon types.");
+        feedback(source, "Example: /b set Steve ground");
+        feedback(source, "Aliases: /badge, /typebadge, /cach badge.");
+        return 1;
+    }
+
+    private static int badgeTypes(ServerCommandSource source) {
+        feedback(source, "Valid badge types: " + PlayerBadgeManager.validTypesText());
+        return 1;
+    }
+
+    private static int setBadge(ServerCommandSource source, ServerPlayerEntity player, String rawType) {
+        String type = PlayerBadgeManager.canonicalType(rawType);
+        if (type.isBlank()) {
+            feedback(source, "Unknown type '" + rawType + "'. Valid types: " + PlayerBadgeManager.validTypesText());
+            return 0;
+        }
+        AchievementConfig.PlayerBadgeConfig badge = config.playerBadges.get(player.getUuidAsString());
+        if (badge == null) {
+            badge = new AchievementConfig.PlayerBadgeConfig(player, type);
+        }
+        badge.uuid = player.getUuidAsString();
+        badge.name = player.getGameProfile().getName();
+        badge.type = type;
+        badge.active = true;
+        config.playerBadges.put(player.getUuidAsString(), badge);
+        config.save();
+        PlayerBadgeManager.apply(player, config);
+        feedback(source, "Set " + badge.name + " badge to " + type + (badge.gymLeader ? " gym leader" : "") + ".");
+        return 1;
+    }
+
+    private static int setGymBadge(ServerCommandSource source, ServerPlayerEntity player, boolean enabled, String rawType) {
+        String type = "";
+        if (rawType != null && !rawType.isBlank()) {
+            type = PlayerBadgeManager.canonicalType(rawType);
+            if (type.isBlank()) {
+                feedback(source, "Unknown type '" + rawType + "'. Valid types: " + PlayerBadgeManager.validTypesText());
+                return 0;
+            }
+        }
+
+        AchievementConfig.PlayerBadgeConfig badge = config.playerBadges.get(player.getUuidAsString());
+        if (badge == null) {
+            badge = new AchievementConfig.PlayerBadgeConfig(player, type);
+        }
+        badge.uuid = player.getUuidAsString();
+        badge.name = player.getGameProfile().getName();
+        if (!type.isBlank()) badge.type = type;
+        badge.gymLeader = enabled;
+        badge.active = true;
+
+        if (!enabled && (badge.type == null || badge.type.isBlank())) {
+            config.playerBadges.remove(player.getUuidAsString());
+        } else {
+            config.playerBadges.put(player.getUuidAsString(), badge);
+        }
+
+        config.save();
+        PlayerBadgeManager.apply(player, config);
+        feedback(source, (enabled ? "Added" : "Removed") + " gym leader tag for " + player.getGameProfile().getName() + ".");
+        return 1;
+    }
+
+    private static int clearBadge(ServerCommandSource source, ServerPlayerEntity player) {
+        config.playerBadges.remove(player.getUuidAsString());
+        config.save();
+        PlayerBadgeManager.apply(player, config);
+        feedback(source, "Cleared badge for " + player.getGameProfile().getName() + ".");
+        return 1;
+    }
+
+    private static int listBadges(ServerCommandSource source) {
+        if (config.playerBadges.isEmpty()) {
+            feedback(source, "No player badges configured.");
+            return 1;
+        }
+        for (AchievementConfig.PlayerBadgeConfig badge : config.playerBadges.values()) {
+            String type = badge.type == null || badge.type.isBlank() ? "no type" : badge.type;
+            String status = badge.active ? "active" : "inactive";
+            feedback(source, badge.name + " -> " + (badge.gymLeader ? "Gym Leader, " : "") + type + " (" + status + ")");
+        }
+        return 1;
+    }
+
+    private static int applyBadges(ServerCommandSource source) {
+        PlayerBadgeManager.applyAll(source.getServer(), config);
+        feedback(source, "Applied player badges to online players.");
         return 1;
     }
 

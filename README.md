@@ -2,42 +2,130 @@
 
 Server-side Fabric mod for Cobblemon 1.7.3 on Minecraft 1.21.1.
 
-Features:
+## Features
 
 - OP-managed defeat achievements for specific players.
 - Target players can toggle whether their achievement is active.
-- Server-side battle victory checks.
-- Snapshot export of every online player's party and PC Pokemon, including levels, moves, ability, nature, held item, and health.
+- Server-side Cobblemon battle victory checks.
+- Snapshot export of every online player's party and PC Pokemon.
 - Export to local JSON files, an HTTP endpoint, or GitHub Contents API.
-- Signed remote manifest support for GitHub/IPFS-style data and update checks. The mod verifies the manifest with a hardcoded Ed25519 public key before caching data or downloading an update jar.
-- GitHub auto-update checks every 5 minutes by default. When the signed manifest changes, the server downloads the new jar, tries to replace the loaded mod jar, and tells the server that a restart is required.
+- Signed remote manifest support for GitHub/IPFS-style data and update checks.
+- Server-side player list/nameplate badges using vanilla scoreboard teams.
+- Pokemon type badges and gym leader tags that work without a client-side install.
 
+## Requirements
 
-Build:
+- Minecraft server: `1.21.1`
+- Fabric Loader: `0.19.2` or newer
+- Fabric API: `0.116.11+1.21.1` or compatible
+- Fabric Language Kotlin: `1.13.6+kotlin.2.2.20` or compatible
+- Cobblemon Fabric: `1.7.3`
+- Java: `21`
 
-- Install Java 21 and Gradle 9.4.0 or newer.
-- Put the Cobblemon Fabric 1.7.3 jar at the path in `gradle.properties`, or change `cobblemon_jar` to your local jar path.
-- Run `gradle build`.
+## Download And Install
 
-Commands:
+Download the source from GitHub:
 
-- `/cach active <on|off>` lets a target player control achievement availability.
-- `/cach target add <player> [achievementId] [title]` adds a target. Requires OP.
-- `/cach target remove <player>` removes a target. Requires OP.
-- `/cach target list` lists target status. Requires OP.
-- `/cach snapshot now` writes and sends the current snapshot.
-- `/cach snapshot toclient` sends the current full server snapshot to the configured owner's client mod.
-- `/cach remote status` shows the signed remote manifest status. Requires owner.
-- `/cach remote refresh` fetches and verifies the signed remote manifest immediately. Requires owner.
+```powershell
+git clone https://github.com/Potato4507/cobblemon-achievements-server.git
+cd cobblemon-achievements-server
+```
 
+Build the server mod:
 
-Remote manifest:
+```powershell
+.\gradlew.bat build
+```
+
+If Java is not on your PATH, set `JAVA_HOME` first:
+
+```powershell
+$env:JAVA_HOME = "C:\Path\To\Java21"
+$env:Path = "$env:JAVA_HOME\bin;$env:Path"
+.\gradlew.bat build
+```
+
+Install the built jar:
+
+```powershell
+Copy-Item .\build\libs\cobblemon-achievements-server-0.1.1.jar "C:\Path\To\Your\Server\mods\"
+```
+
+Then restart the Minecraft server. Do not put this jar in every player's client mods folder; this is a server-side mod.
+
+## Short Badge Commands
+
+Use `/b help` in-game for the quick command guide.
+
+```mcfunction
+/b help
+/b types
+/b set <player> <type>
+/b gym <player> on [type]
+/b gym <player> off
+/b clear <player>
+/b list
+```
+
+Examples:
+
+```mcfunction
+/b set Steve ground
+/b gym Steve on ground
+/b clear Steve
+```
+
+Aliases:
+
+```mcfunction
+/badge ...
+/typebadge ...
+/cach badge ...
+```
+
+Valid badge types:
+
+```text
+Normal, Fire, Water, Electric, Grass, Ice, Fighting, Poison, Ground, Flying, Psychic, Bug, Rock, Ghost, Dragon, Dark, Steel, Fairy
+```
+
+Notes:
+
+- Badge commands require OP permission.
+- Badges are saved in `config/cobblemon-achievements-server.json`.
+- `playerBadgesEnabled` can turn all badge display on or off.
+- The mod uses vanilla scoreboard teams. Another mod/plugin that also manages scoreboard teams can override or conflict with name badges.
+
+## Achievement Commands
+
+```mcfunction
+/cach active on
+/cach active off
+/cach target add <player> [achievementId] [title]
+/cach target remove <player>
+/cach target list
+/cach snapshot now
+/cach snapshot toclient
+/cach remote status
+/cach remote refresh
+```
+
+Command notes:
+
+- `/cach active <on|off>` lets a configured target player control achievement availability.
+- `/cach target ...` commands require OP.
+- `/cach snapshot now` exports the current server snapshot.
+- `/cach snapshot toclient` sends the full server snapshot to the configured owner's client mod.
+- `/cach remote status` and `/cach remote refresh` require owner access.
+
+## Remote Manifest
 
 - Publish `remote/manifest.signed.json` to GitHub raw, IPFS, or another static file host.
 - The default GitHub raw manifest URL is already configured:
   `https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/manifest.signed.json`
-- Put the new jar URL in `downloadUrl`, or put base64 chunk URLs in `downloadBase64Chunks`; the mod verifies `downloadSha256` before using the jar.
-- Add more fallback URLs to `remoteManifestUrls` in `config/cobblemon-achievements-server.json` if wanted.
+- Put the new jar URL in `downloadUrl`, or put base64 chunk URLs in `downloadBase64Chunks`.
+- The mod verifies `downloadSha256` before using a downloaded jar.
+- Add fallback URLs to `remoteManifestUrls` in `config/cobblemon-achievements-server.json`.
 - The unsigned payload lives at `remote/manifest.payload.json`.
 - Sign it with `tools/sign-manifest.mjs`.
 - Keep `local-secrets/manifest-private-key.pem` private. It is ignored by git.
