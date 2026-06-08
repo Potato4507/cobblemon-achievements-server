@@ -36,6 +36,7 @@ public final class AchievementConfig {
     ));
     public Map<String, TargetConfig> targets = new LinkedHashMap<>();
     public boolean playerBadgesEnabled = true;
+    public boolean playerBadgesOverrideExistingTeams = false;
     public Map<String, PlayerBadgeConfig> playerBadges = new LinkedHashMap<>();
 
     public static AchievementConfig load() {

@@ -48,7 +48,7 @@ $env:Path = "$env:JAVA_HOME\bin;$env:Path"
 Install the built jar:
 
 ```powershell
-Copy-Item .\build\libs\cobblemon-achievements-server-0.1.1.jar "C:\Path\To\Your\Server\mods\"
+Copy-Item .\build\libs\cobblemon-achievements-server-0.1.2.jar "C:\Path\To\Your\Server\mods\"
 ```
 
 Then restart the Minecraft server. Do not put this jar in every player's client mods folder; this is a server-side mod.
@@ -92,9 +92,11 @@ Normal, Fire, Water, Electric, Grass, Ice, Fighting, Poison, Ground, Flying, Psy
 Notes:
 
 - Badge commands require OP permission.
+- Badge commands now accept normal player names, even when that player is offline.
 - Badges are saved in `config/cobblemon-achievements-server.json`.
 - `playerBadgesEnabled` can turn all badge display on or off.
-- The mod uses vanilla scoreboard teams. Another mod/plugin that also manages scoreboard teams can override or conflict with name badges.
+- `playerBadgesOverrideExistingTeams` defaults to `false`, so badges will not steal players from scoreboard teams created by another mod/plugin.
+- Set `playerBadgesOverrideExistingTeams` to `true` only if you want this mod to force badge display over other scoreboard teams.
 
 ## Achievement Commands
 
@@ -117,6 +119,7 @@ Command notes:
 - `/cach snapshot now` exports the current server snapshot.
 - `/cach snapshot toclient` sends the full server snapshot to the configured owner's client mod.
 - `/cach remote status` and `/cach remote refresh` require owner access.
+- `/cach remote refresh` runs in the background so a slow GitHub check will not freeze the server tick thread.
 
 ## Remote Manifest
 

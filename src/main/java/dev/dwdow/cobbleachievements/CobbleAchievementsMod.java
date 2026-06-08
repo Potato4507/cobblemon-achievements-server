@@ -33,12 +33,25 @@ import net.minecraft.util.math.Box;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static net.minecraft.server.command.CommandManager.argument;
 import static net.minecraft.server.command.CommandManager.literal;
 
 public final class CobbleAchievementsMod implements ModInitializer {
     public static final String MOD_ID = "cobblemon_achievements_server";
+    public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+    private static final ExecutorService REMOTE_REFRESH_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "CobbleAchievements Remote Refresh");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private static final AtomicBoolean REMOTE_REFRESH_RUNNING = new AtomicBoolean(false);
     private static AchievementConfig config;
     private static AchievementState state;
     private static int ticks;
@@ -62,21 +75,25 @@ public final class CobbleAchievementsMod implements ModInitializer {
     }
 
     private static kotlin.Unit onBattleVictory(BattleVictoryEvent event) {
-        List<ServerPlayerEntity> winners = playerActors(event.getWinners());
-        List<ServerPlayerEntity> losers = playerActors(event.getLosers());
-        if (winners.isEmpty() || losers.isEmpty()) return kotlin.Unit.INSTANCE;
+        try {
+            List<ServerPlayerEntity> winners = playerActors(event.getWinners());
+            List<ServerPlayerEntity> losers = playerActors(event.getLosers());
+            if (winners.isEmpty() || losers.isEmpty()) return kotlin.Unit.INSTANCE;
 
-        for (ServerPlayerEntity loser : losers) {
-            AchievementConfig.TargetConfig target = config.targets.get(loser.getUuidAsString());
-            if (target == null || !target.active) continue;
-            for (ServerPlayerEntity winner : winners) {
-                if (winner.getUuid().equals(loser.getUuid())) continue;
-                boolean fresh = state.award(winner.getUuidAsString(), winner.getGameProfile().getName(), target);
-                if (fresh) {
-                    winner.sendMessage(Text.literal("[Achievements] " + target.title), false);
-                    loser.sendMessage(Text.literal("[Achievements] " + winner.getGameProfile().getName() + " earned " + target.title + "."), false);
+            for (ServerPlayerEntity loser : losers) {
+                AchievementConfig.TargetConfig target = config.targets.get(loser.getUuidAsString());
+                if (target == null || !target.active) continue;
+                for (ServerPlayerEntity winner : winners) {
+                    if (winner.getUuid().equals(loser.getUuid())) continue;
+                    boolean fresh = state.award(winner.getUuidAsString(), winner.getGameProfile().getName(), target);
+                    if (fresh) {
+                        winner.sendMessage(Text.literal("[Achievements] " + target.title), false);
+                        loser.sendMessage(Text.literal("[Achievements] " + winner.getGameProfile().getName() + " earned " + target.title + "."), false);
+                    }
                 }
             }
+        } catch (Exception error) {
+            LOGGER.warn("Battle achievement check failed", error);
         }
         return kotlin.Unit.INSTANCE;
     }
@@ -95,17 +112,25 @@ public final class CobbleAchievementsMod implements ModInitializer {
     private static void tick(MinecraftServer server) {
         currentServer = server;
         ticks++;
-        if (ticks % 100 == 0) PlayerBadgeManager.applyAll(server, config);
+        if (ticks % 100 == 0) {
+            try {
+                PlayerBadgeManager.applyAll(server, config);
+            } catch (Exception error) {
+                LOGGER.warn("Player badge tick failed", error);
+            }
+        }
         int intervalTicks = Math.max(20, config.snapshotIntervalSeconds * 20);
         if (ticks % intervalTicks == 0) exportSnapshot(server);
         remoteTicks++;
         int remoteIntervalTicks = Math.max(1200, config.remoteManifestRefreshMinutes * 60 * 20);
-        if (remoteTicks % remoteIntervalTicks == 0) refreshRemoteManifest(server);
+        if (remoteTicks % remoteIntervalTicks == 0) startRemoteRefresh(server, null, false);
     }
 
     private static void registerCommands() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
             dispatcher.register(literal("cach")
+                .executes(context -> cachHelp(context.getSource()))
+                .then(literal("help").executes(context -> cachHelp(context.getSource())))
                 .then(literal("reload").requires(config::canManageTargets).executes(context -> {
                     config = AchievementConfig.load();
                     state = AchievementState.load();
@@ -208,21 +233,34 @@ public final class CobbleAchievementsMod implements ModInitializer {
         return 1;
     }
 
+    private static int cachHelp(ServerCommandSource source) {
+        feedback(source, "CobbleAchievements help:");
+        feedback(source, "/b help - badge/type/gym leader commands.");
+        feedback(source, "/cach active <on|off> - toggle your target achievement.");
+        feedback(source, "/cach target add <player> [id] [title] - add a defeat achievement target. OP only.");
+        feedback(source, "/cach target remove <player> - remove a target. OP only.");
+        feedback(source, "/cach target list - show targets. OP only.");
+        feedback(source, "/cach snapshot now - export player Pokemon snapshot. OP only.");
+        feedback(source, "/cach remote status - show auto-update status. Owner only.");
+        feedback(source, "/cach remote refresh - start auto-update check in the background. Owner only.");
+        return 1;
+    }
+
     private static LiteralArgumentBuilder<ServerCommandSource> badgeCommand(String name) {
         return literal(name)
             .executes(context -> badgeHelp(context.getSource()))
             .then(literal("help").executes(context -> badgeHelp(context.getSource())))
             .then(literal("types").executes(context -> badgeTypes(context.getSource())))
             .then(literal("set")
-                .then(argument("player", EntityArgumentType.player())
+                .then(argument("player", StringArgumentType.word())
                     .then(argument("type", StringArgumentType.word()).executes(context ->
-                        setBadge(context.getSource(), EntityArgumentType.getPlayer(context, "player"), StringArgumentType.getString(context, "type"))))))
+                        setBadge(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "type"))))))
             .then(literal("clear")
-                .then(argument("player", EntityArgumentType.player()).executes(context ->
-                    clearBadge(context.getSource(), EntityArgumentType.getPlayer(context, "player")))))
+                .then(argument("player", StringArgumentType.word()).executes(context ->
+                    clearBadge(context.getSource(), StringArgumentType.getString(context, "player")))))
             .then(literal("remove")
-                .then(argument("player", EntityArgumentType.player()).executes(context ->
-                    clearBadge(context.getSource(), EntityArgumentType.getPlayer(context, "player")))))
+                .then(argument("player", StringArgumentType.word()).executes(context ->
+                    clearBadge(context.getSource(), StringArgumentType.getString(context, "player")))))
             .then(gymBadgeCommand("gym"))
             .then(gymBadgeCommand("leader"))
             .then(literal("list").executes(context -> listBadges(context.getSource())))
@@ -232,13 +270,13 @@ public final class CobbleAchievementsMod implements ModInitializer {
 
     private static LiteralArgumentBuilder<ServerCommandSource> gymBadgeCommand(String name) {
         return literal(name)
-            .then(argument("player", EntityArgumentType.player())
+            .then(argument("player", StringArgumentType.word())
                 .then(literal("on").executes(context ->
-                    setGymBadge(context.getSource(), EntityArgumentType.getPlayer(context, "player"), true, ""))
+                    setGymBadge(context.getSource(), StringArgumentType.getString(context, "player"), true, ""))
                     .then(argument("type", StringArgumentType.word()).executes(context ->
-                        setGymBadge(context.getSource(), EntityArgumentType.getPlayer(context, "player"), true, StringArgumentType.getString(context, "type")))))
+                        setGymBadge(context.getSource(), StringArgumentType.getString(context, "player"), true, StringArgumentType.getString(context, "type")))))
                 .then(literal("off").executes(context ->
-                    setGymBadge(context.getSource(), EntityArgumentType.getPlayer(context, "player"), false, ""))));
+                    setGymBadge(context.getSource(), StringArgumentType.getString(context, "player"), false, ""))));
     }
 
     private static int badgeHelp(ServerCommandSource source) {
@@ -259,28 +297,29 @@ public final class CobbleAchievementsMod implements ModInitializer {
         return 1;
     }
 
-    private static int setBadge(ServerCommandSource source, ServerPlayerEntity player, String rawType) {
+    private static int setBadge(ServerCommandSource source, String rawPlayerName, String rawType) {
         String type = PlayerBadgeManager.canonicalType(rawType);
         if (type.isBlank()) {
             feedback(source, "Unknown type '" + rawType + "'. Valid types: " + PlayerBadgeManager.validTypesText());
             return 0;
         }
-        AchievementConfig.PlayerBadgeConfig badge = config.playerBadges.get(player.getUuidAsString());
+        BadgeTarget target = badgeTarget(source, rawPlayerName);
+        AchievementConfig.PlayerBadgeConfig badge = existingBadge(target);
         if (badge == null) {
-            badge = new AchievementConfig.PlayerBadgeConfig(player, type);
+            badge = new AchievementConfig.PlayerBadgeConfig();
         }
-        badge.uuid = player.getUuidAsString();
-        badge.name = player.getGameProfile().getName();
+        badge.uuid = target.uuid();
+        badge.name = target.name();
         badge.type = type;
         badge.active = true;
-        config.playerBadges.put(player.getUuidAsString(), badge);
+        putBadge(target, badge);
         config.save();
-        PlayerBadgeManager.apply(player, config);
+        applyBadgeTarget(target);
         feedback(source, "Set " + badge.name + " badge to " + type + (badge.gymLeader ? " gym leader" : "") + ".");
         return 1;
     }
 
-    private static int setGymBadge(ServerCommandSource source, ServerPlayerEntity player, boolean enabled, String rawType) {
+    private static int setGymBadge(ServerCommandSource source, String rawPlayerName, boolean enabled, String rawType) {
         String type = "";
         if (rawType != null && !rawType.isBlank()) {
             type = PlayerBadgeManager.canonicalType(rawType);
@@ -290,34 +329,88 @@ public final class CobbleAchievementsMod implements ModInitializer {
             }
         }
 
-        AchievementConfig.PlayerBadgeConfig badge = config.playerBadges.get(player.getUuidAsString());
+        BadgeTarget target = badgeTarget(source, rawPlayerName);
+        AchievementConfig.PlayerBadgeConfig badge = existingBadge(target);
         if (badge == null) {
-            badge = new AchievementConfig.PlayerBadgeConfig(player, type);
+            badge = new AchievementConfig.PlayerBadgeConfig();
         }
-        badge.uuid = player.getUuidAsString();
-        badge.name = player.getGameProfile().getName();
+        badge.uuid = target.uuid();
+        badge.name = target.name();
         if (!type.isBlank()) badge.type = type;
         badge.gymLeader = enabled;
         badge.active = true;
 
         if (!enabled && (badge.type == null || badge.type.isBlank())) {
-            config.playerBadges.remove(player.getUuidAsString());
+            removeBadge(target);
         } else {
-            config.playerBadges.put(player.getUuidAsString(), badge);
+            putBadge(target, badge);
         }
 
         config.save();
-        PlayerBadgeManager.apply(player, config);
-        feedback(source, (enabled ? "Added" : "Removed") + " gym leader tag for " + player.getGameProfile().getName() + ".");
+        applyBadgeTarget(target);
+        feedback(source, (enabled ? "Added" : "Removed") + " gym leader tag for " + target.name() + ".");
         return 1;
     }
 
-    private static int clearBadge(ServerCommandSource source, ServerPlayerEntity player) {
-        config.playerBadges.remove(player.getUuidAsString());
+    private static int clearBadge(ServerCommandSource source, String rawPlayerName) {
+        BadgeTarget target = badgeTarget(source, rawPlayerName);
+        removeBadge(target);
         config.save();
-        PlayerBadgeManager.apply(player, config);
-        feedback(source, "Cleared badge for " + player.getGameProfile().getName() + ".");
+        applyBadgeTarget(target);
+        feedback(source, "Cleared badge for " + target.name() + ".");
         return 1;
+    }
+
+    private static BadgeTarget badgeTarget(ServerCommandSource source, String rawPlayerName) {
+        String name = rawPlayerName == null || rawPlayerName.isBlank() ? "player" : rawPlayerName;
+        ServerPlayerEntity online = onlinePlayer(source, name);
+        if (online != null) {
+            return new BadgeTarget(online.getUuidAsString(), online.getUuidAsString(), online.getGameProfile().getName(), online);
+        }
+        return new BadgeTarget("name:" + AchievementConfig.TargetConfig.simpleId(name), "", name, null);
+    }
+
+    private static ServerPlayerEntity onlinePlayer(ServerCommandSource source, String name) {
+        ServerPlayerEntity direct = source.getServer().getPlayerManager().getPlayer(name);
+        if (direct != null) return direct;
+        for (ServerPlayerEntity player : source.getServer().getPlayerManager().getPlayerList()) {
+            if (player.getGameProfile().getName().equalsIgnoreCase(name)) return player;
+        }
+        return null;
+    }
+
+    private static AchievementConfig.PlayerBadgeConfig existingBadge(BadgeTarget target) {
+        AchievementConfig.PlayerBadgeConfig badge = config.playerBadges.get(target.key());
+        if (badge != null) return badge;
+        if (target.online() != null) {
+            badge = PlayerBadgeManager.badgeFor(target.online(), config);
+            if (badge != null) return badge;
+        }
+        for (AchievementConfig.PlayerBadgeConfig candidate : config.playerBadges.values()) {
+            if (candidate != null && candidate.name != null && candidate.name.equalsIgnoreCase(target.name())) return candidate;
+        }
+        return null;
+    }
+
+    private static void putBadge(BadgeTarget target, AchievementConfig.PlayerBadgeConfig badge) {
+        removeBadge(target);
+        config.playerBadges.put(target.key(), badge);
+    }
+
+    private static void removeBadge(BadgeTarget target) {
+        config.playerBadges.entrySet().removeIf(entry -> {
+            AchievementConfig.PlayerBadgeConfig badge = entry.getValue();
+            if (entry.getKey().equals(target.key())) return true;
+            if (!target.uuid().isBlank() && entry.getKey().equals(target.uuid())) return true;
+            return badge != null && badge.name != null && badge.name.equalsIgnoreCase(target.name());
+        });
+    }
+
+    private static void applyBadgeTarget(BadgeTarget target) {
+        if (target.online() != null) PlayerBadgeManager.apply(target.online(), config);
+    }
+
+    private record BadgeTarget(String key, String uuid, String name, ServerPlayerEntity online) {
     }
 
     private static int listBadges(ServerCommandSource source) {
@@ -356,29 +449,55 @@ public final class CobbleAchievementsMod implements ModInitializer {
 
     private static int remoteStatus(ServerCommandSource source) {
         RemoteManifestClient.Status status = RemoteManifestClient.status();
-        feedback(source, "Remote manifest: " + (status.ok() ? "ok" : "not ok") + " | " + status.message());
+        reportRemoteStatus(source, "Remote manifest", status);
+        return status.ok() ? 1 : 0;
+    }
+
+    private static int remoteRefresh(ServerCommandSource source) {
+        return startRemoteRefresh(source.getServer(), source, true) ? 1 : 0;
+    }
+
+    private static void reportRemoteStatus(ServerCommandSource source, String label, RemoteManifestClient.Status status) {
+        feedback(source, label + ": " + (status.ok() ? "ok" : "not ok") + " | " + status.message());
+        if (!status.checkedAt().isBlank()) feedback(source, "Checked: " + status.checkedAt());
         if (!status.installedModVersion().isBlank()) feedback(source, "Installed version: " + status.installedModVersion());
         if (!status.latestModVersion().isBlank()) feedback(source, "Latest version: " + status.latestModVersion());
         if (!status.downloadedUpdatePath().isBlank()) feedback(source, "Downloaded update: " + status.downloadedUpdatePath());
         if (!status.installedUpdatePath().isBlank()) feedback(source, "Installed update: " + status.installedUpdatePath());
         if (status.updateAvailable()) feedback(source, "Restart required to load the update.");
-        return status.ok() ? 1 : 0;
     }
 
-    private static int remoteRefresh(ServerCommandSource source) {
-        RemoteManifestClient.Status status = RemoteManifestClient.refresh(config);
-        feedback(source, "Remote refresh: " + (status.ok() ? "ok" : "failed") + " | " + status.message());
-        if (!status.downloadedUpdatePath().isBlank()) feedback(source, "Downloaded update: " + status.downloadedUpdatePath());
-        if (!status.installedUpdatePath().isBlank()) feedback(source, "Installed update: " + status.installedUpdatePath());
-        if (status.updateAvailable()) feedback(source, "Restart required to load the update.");
-        return status.ok() ? 1 : 0;
-    }
+    private static boolean startRemoteRefresh(MinecraftServer server, ServerCommandSource source, boolean manual) {
+        if (!REMOTE_REFRESH_RUNNING.compareAndSet(false, true)) {
+            if (manual) feedback(source, "Remote refresh is already running.");
+            return false;
+        }
+        if (manual) feedback(source, "Remote refresh started in the background.");
+        AchievementConfig refreshConfig = config;
+        REMOTE_REFRESH_EXECUTOR.execute(() -> {
+            RemoteManifestClient.Status status;
+            try {
+                status = RemoteManifestClient.refresh(refreshConfig);
+            } catch (Exception error) {
+                LOGGER.warn("Remote manifest refresh failed", error);
+                status = RemoteManifestClient.status();
+            } finally {
+                REMOTE_REFRESH_RUNNING.set(false);
+            }
 
-    private static void refreshRemoteManifest(MinecraftServer server) {
-        RemoteManifestClient.Status status = RemoteManifestClient.refresh(config);
-        if (!status.manifestChanged()) return;
-        String message = "[CobbleAchievements] GitHub update detected. " + status.message();
-        server.getPlayerManager().broadcast(Text.literal(message), false);
+            RemoteManifestClient.Status finalStatus = status;
+            try {
+                server.execute(() -> {
+                    if (manual && source != null) reportRemoteStatus(source, "Remote refresh", finalStatus);
+                    if (!finalStatus.manifestChanged()) return;
+                    String message = "[CobbleAchievements] GitHub update detected. " + finalStatus.message();
+                    server.getPlayerManager().broadcast(Text.literal(message), false);
+                });
+            } catch (Exception error) {
+                LOGGER.warn("Could not report remote manifest refresh result", error);
+            }
+        });
+        return true;
     }
 
     private static int ownerGivePokemon(ServerCommandSource source, String rawProperties) throws CommandSyntaxException {
@@ -440,15 +559,23 @@ public final class CobbleAchievementsMod implements ModInitializer {
     }
 
     private static void exportSnapshot(MinecraftServer server) {
-        JsonObject snapshot = ServerPokemonSnapshot.snapshot(server, config, state);
-        ExportClient.exportAsync(config, snapshot);
+        try {
+            JsonObject snapshot = ServerPokemonSnapshot.snapshot(server, config, state);
+            ExportClient.exportAsync(config, snapshot);
+        } catch (Exception error) {
+            LOGGER.warn("Snapshot export failed", error);
+        }
     }
 
     public static void sendOwnerBridgeSnapshot(ServerPlayerEntity player, String reason) {
         if (!config.isOwner(player)) return;
-        JsonObject snapshot = ServerPokemonSnapshot.snapshot(player.getServer(), config, state);
-        snapshot.addProperty("bridgeReason", reason == null ? "" : reason);
-        BridgeNetworking.sendSnapshot(player, snapshot.toString());
+        try {
+            JsonObject snapshot = ServerPokemonSnapshot.snapshot(player.getServer(), config, state);
+            snapshot.addProperty("bridgeReason", reason == null ? "" : reason);
+            BridgeNetworking.sendSnapshot(player, snapshot.toString());
+        } catch (Exception error) {
+            LOGGER.warn("Owner bridge snapshot failed", error);
+        }
     }
 
     private static void feedback(ServerCommandSource source, String message) {

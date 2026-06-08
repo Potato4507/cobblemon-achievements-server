@@ -74,7 +74,11 @@ public final class PlayerBadgeManager {
     public static void applyAll(MinecraftServer server, AchievementConfig config) {
         if (server == null || config == null) return;
         for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
-            apply(player, config);
+            try {
+                apply(player, config);
+            } catch (Exception error) {
+                CobbleAchievementsMod.LOGGER.warn("Could not apply player badge for {}", player.getGameProfile().getName(), error);
+            }
         }
     }
 
@@ -88,16 +92,48 @@ public final class PlayerBadgeManager {
             return;
         }
 
-        AchievementConfig.PlayerBadgeConfig badge = config.playerBadges.get(player.getUuidAsString());
+        AchievementConfig.PlayerBadgeConfig badge = badgeFor(player, config);
         if (badge == null || !badge.active) {
             removeFromBadgeTeams(scoreboard, scoreHolderName);
             return;
         }
         TypeInfo type = type(badge.type);
+        if (current != null && current != ensureTeam(scoreboard, type, badge.gymLeader) && !isBadgeTeam(scoreboard, current) && !config.playerBadgesOverrideExistingTeams) {
+            return;
+        }
         Team team = ensureTeam(scoreboard, type, badge.gymLeader);
         if (current != team) {
             scoreboard.addScoreHolderToTeam(scoreHolderName, team);
         }
+    }
+
+    public static AchievementConfig.PlayerBadgeConfig badgeFor(ServerPlayerEntity player, AchievementConfig config) {
+        if (player == null || config == null || config.playerBadges == null) return null;
+        String uuid = player.getUuidAsString();
+        AchievementConfig.PlayerBadgeConfig badge = config.playerBadges.get(uuid);
+        if (badge != null) return badge;
+
+        String playerName = player.getGameProfile().getName();
+        String matchingKey = "";
+        for (Map.Entry<String, AchievementConfig.PlayerBadgeConfig> entry : config.playerBadges.entrySet()) {
+            AchievementConfig.PlayerBadgeConfig candidate = entry.getValue();
+            if (candidate == null || candidate.name == null) continue;
+            if (candidate.name.equalsIgnoreCase(playerName)) {
+                matchingKey = entry.getKey();
+                badge = candidate;
+                break;
+            }
+        }
+        if (badge == null) return null;
+
+        if (!uuid.equals(matchingKey)) {
+            config.playerBadges.remove(matchingKey);
+            badge.uuid = uuid;
+            badge.name = playerName;
+            config.playerBadges.put(uuid, badge);
+            config.save();
+        }
+        return badge;
     }
 
     private static Team ensureTeam(Scoreboard scoreboard, TypeInfo type, boolean gymLeader) {
@@ -140,6 +176,16 @@ public final class PlayerBadgeManager {
         if (team != null && team == current) {
             scoreboard.removeScoreHolderFromTeam(scoreHolderName, team);
         }
+    }
+
+    private static boolean isBadgeTeam(Scoreboard scoreboard, Team team) {
+        if (team == null) return false;
+        if (scoreboard.getTeam(GYM_ONLY_TEAM) == team) return true;
+        for (TypeInfo type : TYPES) {
+            if (scoreboard.getTeam(teamName(type, false)) == team) return true;
+            if (scoreboard.getTeam(teamName(type, true)) == team) return true;
+        }
+        return false;
     }
 
     private static String teamName(TypeInfo type, boolean gymLeader) {
