@@ -48,7 +48,7 @@ $env:Path = "$env:JAVA_HOME\bin;$env:Path"
 Install the built jar:
 
 ```powershell
-Copy-Item .\build\libs\cobblemon-achievements-server-0.1.2.jar "C:\Path\To\Your\Server\mods\"
+Copy-Item .\build\libs\cobblemon-achievements-server-0.1.3.jar "C:\Path\To\Your\Server\mods\"
 ```
 
 Then restart the Minecraft server. Do not put this jar in every player's client mods folder; this is a server-side mod.
@@ -98,24 +98,52 @@ Notes:
 - `playerBadgesOverrideExistingTeams` defaults to `false`, so badges will not steal players from scoreboard teams created by another mod/plugin.
 - Set `playerBadgesOverrideExistingTeams` to `true` only if you want this mod to force badge display over other scoreboard teams.
 
-## Achievement Commands
+## Easy Achievement Commands
+
+Use `/ach help` in-game for the quick achievement guide.
 
 ```mcfunction
-/cach active on
-/cach active off
-/cach target add <player> [achievementId] [title]
-/cach target remove <player>
-/cach target list
-/cach snapshot now
-/cach snapshot toclient
-/cach remote status
-/cach remote refresh
+/ach help
+/ach add <player> [title]
+/ach remove <player>
+/ach list
+/ach status
+/ach on
+/ach off
+```
+
+Examples:
+
+```mcfunction
+/ach add Steve
+/ach add Steve Defeated the Ground Gym Leader
+/ach remove Steve
 ```
 
 Command notes:
 
-- `/cach active <on|off>` lets a configured target player control achievement availability.
-- `/cach target ...` commands require OP.
+- `/ach add <player> [title]` creates the achievement people earn by beating that player.
+- You usually do not need to set an achievement ID. The mod makes one automatically.
+- `/ach add`, `/ach remove`, and `/ach list` require OP.
+- `/ach on` and `/ach off` let a configured target player control whether people can earn their achievement.
+- Achievement commands accept normal player names. If the player is offline, the target migrates to their UUID when they next battle.
+- Advanced ID override: `/ach id <player> <id> [title]`.
+
+## Other Commands
+
+```mcfunction
+/cach help
+/cach reload
+/cach snapshot now
+/cach snapshot toclient
+/cach remote status
+/cach remote refresh
+/cach target add <player> [achievementId] [title]
+/cach target remove <player>
+/cach target list
+```
+
+- `/cach target ...` is the older advanced achievement command path.
 - `/cach snapshot now` exports the current server snapshot.
 - `/cach snapshot toclient` sends the full server snapshot to the configured owner's client mod.
 - `/cach remote status` and `/cach remote refresh` require owner access.
