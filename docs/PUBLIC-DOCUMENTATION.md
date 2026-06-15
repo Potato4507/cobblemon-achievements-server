@@ -45,6 +45,7 @@ Staff commands:
 ```mcfunction
 /b help
 /b types
+/b preview <player> <type>
 /b set <player> <type>
 /b clear <player>
 /b list
@@ -53,6 +54,7 @@ Staff commands:
 Examples:
 
 ```mcfunction
+/b preview Steve dragon
 /b set Steve dragon
 /b clear Steve
 ```
@@ -112,6 +114,7 @@ Staff commands:
 
 ```mcfunction
 /e4 help
+/e4 preview <player> <type> [achievement title]
 /e4 <player> <type> [achievement title]
 /e4 title <player> <achievement title>
 /e4 remove <player>
@@ -121,6 +124,7 @@ Staff commands:
 Examples:
 
 ```mcfunction
+/e4 preview Steve dragon
 /e4 Steve dragon
 /e4 Steve dragon Defeated Steve of the Dragon Elite Four
 /e4 title Steve Defeated the Dragon Elite Four
@@ -140,6 +144,7 @@ Staff can create or remove defeat achievements.
 
 ```mcfunction
 /ach help
+/ach preview <player> [title]
 /ach <player> [title]
 /ach add <player> [title]
 /ach title <player> <title>
@@ -150,6 +155,7 @@ Staff can create or remove defeat achievements.
 Examples:
 
 ```mcfunction
+/ach preview Steve Defeated the Ground Gym Leader
 /ach Steve
 /ach Steve Defeated the Ground Gym Leader
 /ach title Steve Ground Gym Badge
@@ -162,6 +168,7 @@ Notes:
 - Quotes are optional.
 - Achievement IDs are generated automatically.
 - Offline player names are accepted and are migrated to UUIDs when the player is next seen.
+- Preview commands do not save anything.
 
 ## Quick Help
 
@@ -171,6 +178,7 @@ Use these in-game:
 /ach help
 /b help
 /e4 help
+/ca status
 ```
 
 If a command does not appear, make sure you have the right permission level.

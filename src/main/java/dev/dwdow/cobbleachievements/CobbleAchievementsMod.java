@@ -22,6 +22,8 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.command.CommandSource;
 import net.minecraft.command.argument.EntityArgumentType;
 import net.minecraft.entity.Entity;
 import net.minecraft.item.Item;
@@ -57,6 +59,7 @@ import static net.minecraft.server.command.CommandManager.literal;
 public final class CobbleAchievementsMod implements ModInitializer {
     public static final String MOD_ID = "cobblemon_achievements_server";
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+    public static final String DISPLAY_NAME = "Cobblemon Achievements Server";
     private static final ExecutorService REMOTE_REFRESH_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "CobbleAchievements Remote Refresh");
         thread.setDaemon(true);
@@ -79,6 +82,7 @@ public final class CobbleAchievementsMod implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTED.register(server -> currentServer = server);
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> currentServer = null);
         ServerTickEvents.END_SERVER_TICK.register(CobbleAchievementsMod::tick);
+        LOGGER.info("{} {} loaded. Commands: /cach help, /ca help, /ach help, /b help, /e4 help.", DISPLAY_NAME, installedVersion());
     }
 
     private static void registerEvents() {
@@ -142,6 +146,7 @@ public final class CobbleAchievementsMod implements ModInitializer {
             dispatcher.register(literal("cach")
                 .executes(context -> cachHelp(context.getSource()))
                 .then(literal("help").executes(context -> cachHelp(context.getSource())))
+                .then(literal("status").executes(context -> modStatus(context.getSource())))
                 .then(literal("reload").requires(config::canManageTargets).executes(context -> {
                     config = AchievementConfig.load();
                     state = AchievementState.load();
@@ -199,6 +204,10 @@ public final class CobbleAchievementsMod implements ModInitializer {
                         .then(argument("radius", IntegerArgumentType.integer(1, 128)).executes(context ->
                             ownerCatchNear(context.getSource(), IntegerArgumentType.getInteger(context, "radius"))))))
             );
+            dispatcher.register(literal("ca")
+                .executes(context -> cachHelp(context.getSource()))
+                .then(literal("help").executes(context -> cachHelp(context.getSource())))
+                .then(literal("status").executes(context -> modStatus(context.getSource()))));
             dispatcher.register(badgeCommand("badge").requires(config::canManageTargets));
             dispatcher.register(badgeCommand("b").requires(config::canManageTargets));
             dispatcher.register(badgeCommand("typebadge").requires(config::canManageTargets));
@@ -256,45 +265,50 @@ public final class CobbleAchievementsMod implements ModInitializer {
             .executes(context -> achievementHelp(context.getSource()))
             .then(literal("help").executes(context -> achievementHelp(context.getSource())))
             .then(literal("add").requires(config::canManageTargets)
-                .then(argument("player", StringArgumentType.word()).executes(context ->
+                .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestPlayers).executes(context ->
                     addAchievement(context.getSource(), StringArgumentType.getString(context, "player"), ""))
                     .then(argument("title", StringArgumentType.greedyString()).executes(context ->
                         addAchievement(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "title"))))))
             .then(literal("set").requires(config::canManageTargets)
-                .then(argument("player", StringArgumentType.word()).executes(context ->
+                .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestPlayers).executes(context ->
                     addAchievement(context.getSource(), StringArgumentType.getString(context, "player"), ""))
                     .then(argument("title", StringArgumentType.greedyString()).executes(context ->
                         addAchievement(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "title"))))))
             .then(literal("create").requires(config::canManageTargets)
-                .then(argument("player", StringArgumentType.word()).executes(context ->
+                .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestPlayers).executes(context ->
                     addAchievement(context.getSource(), StringArgumentType.getString(context, "player"), ""))
                     .then(argument("title", StringArgumentType.greedyString()).executes(context ->
                         addAchievement(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "title"))))))
+            .then(literal("preview").requires(config::canManageTargets)
+                .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestPlayers).executes(context ->
+                    previewAchievement(context.getSource(), StringArgumentType.getString(context, "player"), ""))
+                    .then(argument("title", StringArgumentType.greedyString()).executes(context ->
+                        previewAchievement(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "title"))))))
             .then(literal("title").requires(config::canManageTargets)
-                .then(argument("player", StringArgumentType.word())
+                .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestPlayers)
                     .then(argument("title", StringArgumentType.greedyString()).executes(context ->
                         addAchievement(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "title"))))))
             .then(literal("rename").requires(config::canManageTargets)
-                .then(argument("player", StringArgumentType.word())
+                .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestPlayers)
                     .then(argument("title", StringArgumentType.greedyString()).executes(context ->
                         addAchievement(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "title"))))))
             .then(literal("id").requires(config::canManageTargets)
-                .then(argument("player", StringArgumentType.word())
+                .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestPlayers)
                     .then(argument("id", StringArgumentType.word()).executes(context ->
                         setAchievementId(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "id"), ""))
                         .then(argument("title", StringArgumentType.greedyString()).executes(context ->
                             setAchievementId(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "id"), StringArgumentType.getString(context, "title")))))))
             .then(literal("remove").requires(config::canManageTargets)
-                .then(argument("player", StringArgumentType.word()).executes(context ->
+                .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestConfiguredAchievementPlayers).executes(context ->
                     removeAchievement(context.getSource(), StringArgumentType.getString(context, "player")))))
             .then(literal("rm").requires(config::canManageTargets)
-                .then(argument("player", StringArgumentType.word()).executes(context ->
+                .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestConfiguredAchievementPlayers).executes(context ->
                     removeAchievement(context.getSource(), StringArgumentType.getString(context, "player")))))
             .then(literal("delete").requires(config::canManageTargets)
-                .then(argument("player", StringArgumentType.word()).executes(context ->
+                .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestConfiguredAchievementPlayers).executes(context ->
                     removeAchievement(context.getSource(), StringArgumentType.getString(context, "player")))))
             .then(literal("clear").requires(config::canManageTargets)
-                .then(argument("player", StringArgumentType.word()).executes(context ->
+                .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestConfiguredAchievementPlayers).executes(context ->
                     removeAchievement(context.getSource(), StringArgumentType.getString(context, "player")))))
             .then(literal("list").requires(config::canManageTargets).executes(context -> listTargets(context.getSource())))
             .then(literal("ls").requires(config::canManageTargets).executes(context -> listTargets(context.getSource())))
@@ -308,7 +322,7 @@ public final class CobbleAchievementsMod implements ModInitializer {
             .then(literal("off").executes(context -> setActive(context.getSource(), false)))
             .then(literal("disable").executes(context -> setActive(context.getSource(), false)))
             .then(literal("inactive").executes(context -> setActive(context.getSource(), false)))
-            .then(argument("player", StringArgumentType.word()).requires(config::canManageTargets).executes(context ->
+            .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestPlayers).requires(config::canManageTargets).executes(context ->
                 addAchievement(context.getSource(), StringArgumentType.getString(context, "player"), ""))
                 .then(argument("title", StringArgumentType.greedyString()).executes(context ->
                     addAchievement(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "title")))));
@@ -319,31 +333,37 @@ public final class CobbleAchievementsMod implements ModInitializer {
             .executes(context -> eliteFourHelp(context.getSource()))
             .then(literal("help").executes(context -> eliteFourHelp(context.getSource())))
             .then(literal("add").requires(config::canManageTargets)
-                .then(argument("player", StringArgumentType.word())
-                    .then(argument("type", StringArgumentType.word()).executes(context ->
+                .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestPlayers)
+                    .then(argument("type", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestTypes).executes(context ->
                         setEliteFour(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "type"), ""))
                         .then(argument("title", StringArgumentType.greedyString()).executes(context ->
                             setEliteFour(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "type"), StringArgumentType.getString(context, "title")))))))
             .then(literal("set").requires(config::canManageTargets)
-                .then(argument("player", StringArgumentType.word())
-                    .then(argument("type", StringArgumentType.word()).executes(context ->
+                .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestPlayers)
+                    .then(argument("type", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestTypes).executes(context ->
                         setEliteFour(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "type"), ""))
                         .then(argument("title", StringArgumentType.greedyString()).executes(context ->
                             setEliteFour(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "type"), StringArgumentType.getString(context, "title")))))))
+            .then(literal("preview").requires(config::canManageTargets)
+                .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestPlayers)
+                    .then(argument("type", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestTypes).executes(context ->
+                        previewEliteFour(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "type"), ""))
+                        .then(argument("title", StringArgumentType.greedyString()).executes(context ->
+                            previewEliteFour(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "type"), StringArgumentType.getString(context, "title")))))))
             .then(literal("title").requires(config::canManageTargets)
-                .then(argument("player", StringArgumentType.word())
+                .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestConfiguredEliteFourPlayers)
                     .then(argument("title", StringArgumentType.greedyString()).executes(context ->
                         setEliteFourTitle(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "title"))))))
             .then(literal("remove").requires(config::canManageTargets)
-                .then(argument("player", StringArgumentType.word()).executes(context ->
+                .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestConfiguredEliteFourPlayers).executes(context ->
                     removeEliteFour(context.getSource(), StringArgumentType.getString(context, "player")))))
             .then(literal("clear").requires(config::canManageTargets)
-                .then(argument("player", StringArgumentType.word()).executes(context ->
+                .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestConfiguredEliteFourPlayers).executes(context ->
                     removeEliteFour(context.getSource(), StringArgumentType.getString(context, "player")))))
             .then(literal("list").requires(config::canManageTargets).executes(context -> listEliteFour(context.getSource())))
             .then(literal("ls").requires(config::canManageTargets).executes(context -> listEliteFour(context.getSource())))
-            .then(argument("player", StringArgumentType.word()).requires(config::canManageTargets)
-                .then(argument("type", StringArgumentType.word()).executes(context ->
+            .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestPlayers).requires(config::canManageTargets)
+                .then(argument("type", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestTypes).executes(context ->
                     setEliteFour(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "type"), ""))
                     .then(argument("title", StringArgumentType.greedyString()).executes(context ->
                         setEliteFour(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "type"), StringArgumentType.getString(context, "title"))))));
@@ -398,6 +418,23 @@ public final class CobbleAchievementsMod implements ModInitializer {
         config.save();
         applyBadgeTarget(badgeTarget);
         feedback(source, "Elite 4 set: " + playerTarget.name() + " -> " + type + " | " + title + " (id " + target.achievementId + ").");
+        return 1;
+    }
+
+    private static int previewEliteFour(ServerCommandSource source, String rawPlayerName, String rawType, String rawTitle) {
+        String type = PlayerBadgeManager.canonicalType(rawType);
+        if (type.isBlank()) {
+            feedback(source, "Unknown type '" + rawType + "'. Run /b types for valid types.");
+            return 0;
+        }
+        PlayerTarget playerTarget = playerTarget(source, rawPlayerName);
+        String title = cleanTitle(rawTitle);
+        if (title.isBlank()) title = "Defeated " + playerTarget.name() + " of the " + type + " Elite Four";
+        String id = AchievementConfig.TargetConfig.simpleId("elite4_" + type + "_" + playerTarget.name());
+        AchievementConfig.TargetConfig existing = existingTarget(playerTarget);
+        if (existing != null && existing.achievementId != null && !existing.achievementId.isBlank()) id = existing.achievementId;
+        feedback(source, "Preview only: Elite 4 " + type + " " + playerTarget.name() + " | " + title + " (id " + id + ").");
+        feedback(source, "Apply with: /e4 " + playerTarget.name() + " " + type.toLowerCase(Locale.ROOT) + " " + title);
         return 1;
     }
 
@@ -590,6 +627,18 @@ public final class CobbleAchievementsMod implements ModInitializer {
         return 1;
     }
 
+    private static int previewAchievement(ServerCommandSource source, String rawPlayerName, String rawTitle) {
+        PlayerTarget targetPlayer = playerTarget(source, rawPlayerName);
+        String title = cleanTitle(rawTitle);
+        if (title.isBlank()) title = "Defeated " + targetPlayer.name();
+        String id = AchievementConfig.TargetConfig.simpleId(targetPlayer.name());
+        AchievementConfig.TargetConfig existing = existingTarget(targetPlayer);
+        if (existing != null && existing.achievementId != null && !existing.achievementId.isBlank()) id = existing.achievementId;
+        feedback(source, "Preview only: beat " + targetPlayer.name() + " -> " + title + " (id " + id + ").");
+        feedback(source, "Apply with: /ach " + targetPlayer.name() + " " + title);
+        return 1;
+    }
+
     private static int setAchievementId(ServerCommandSource source, String rawPlayerName, String rawId, String rawTitle) {
         PlayerTarget targetPlayer = playerTarget(source, rawPlayerName);
         String title = cleanTitle(rawTitle);
@@ -730,6 +779,7 @@ public final class CobbleAchievementsMod implements ModInitializer {
 
     private static int cachHelp(ServerCommandSource source) {
         feedback(source, "CobbleAchievements help:");
+        feedback(source, "/ca status - quick version/config/status check.");
         feedback(source, "/ach help - easy achievement commands.");
         feedback(source, "/b help - badge/type/gym leader commands.");
         feedback(source, "/e4 help - Elite 4 tags and defeat achievements.");
@@ -744,20 +794,34 @@ public final class CobbleAchievementsMod implements ModInitializer {
         return 1;
     }
 
+    private static int modStatus(ServerCommandSource source) {
+        feedback(source, DISPLAY_NAME + " " + installedVersion() + " is loaded.");
+        feedback(source, "Config: " + AchievementConfig.path());
+        feedback(source, "Achievements: " + config.targets.size() + " targets. Badges: " + config.playerBadges.size() + " players.");
+        feedback(source, "Badges enabled: " + config.playerBadgesEnabled + ". Snapshot interval: " + Math.max(1, config.snapshotIntervalSeconds) + "s.");
+        RemoteManifestClient.Status remote = RemoteManifestClient.status();
+        feedback(source, "Remote updates: " + (config.remoteManifestEnabled ? "enabled" : "disabled") + " | " + remote.message());
+        return 1;
+    }
+
     private static LiteralArgumentBuilder<ServerCommandSource> badgeCommand(String name) {
         return literal(name)
             .executes(context -> badgeHelp(context.getSource()))
             .then(literal("help").executes(context -> badgeHelp(context.getSource())))
             .then(literal("types").executes(context -> badgeTypes(context.getSource())))
             .then(literal("set")
-                .then(argument("player", StringArgumentType.word())
-                    .then(argument("type", StringArgumentType.word()).executes(context ->
+                .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestPlayers)
+                    .then(argument("type", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestTypes).executes(context ->
                         setBadge(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "type"))))))
+            .then(literal("preview")
+                .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestPlayers)
+                    .then(argument("type", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestTypes).executes(context ->
+                        previewBadge(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "type"))))))
             .then(literal("clear")
-                .then(argument("player", StringArgumentType.word()).executes(context ->
+                .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestConfiguredBadgePlayers).executes(context ->
                     clearBadge(context.getSource(), StringArgumentType.getString(context, "player")))))
             .then(literal("remove")
-                .then(argument("player", StringArgumentType.word()).executes(context ->
+                .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestConfiguredBadgePlayers).executes(context ->
                     clearBadge(context.getSource(), StringArgumentType.getString(context, "player")))))
             .then(gymBadgeCommand("gym"))
             .then(gymBadgeCommand("leader"))
@@ -768,10 +832,10 @@ public final class CobbleAchievementsMod implements ModInitializer {
 
     private static LiteralArgumentBuilder<ServerCommandSource> gymBadgeCommand(String name) {
         return literal(name)
-            .then(argument("player", StringArgumentType.word())
+            .then(argument("player", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestPlayers)
                 .then(literal("on").executes(context ->
                     setGymBadge(context.getSource(), StringArgumentType.getString(context, "player"), true, ""))
-                    .then(argument("type", StringArgumentType.word()).executes(context ->
+                    .then(argument("type", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestTypes).executes(context ->
                         setGymBadge(context.getSource(), StringArgumentType.getString(context, "player"), true, StringArgumentType.getString(context, "type")))))
                 .then(literal("off").executes(context ->
                     setGymBadge(context.getSource(), StringArgumentType.getString(context, "player"), false, ""))));
@@ -814,6 +878,18 @@ public final class CobbleAchievementsMod implements ModInitializer {
         config.save();
         applyBadgeTarget(target);
         feedback(source, "Set " + badge.name + " badge to " + type + (badge.gymLeader ? " gym leader" : "") + ".");
+        return 1;
+    }
+
+    private static int previewBadge(ServerCommandSource source, String rawPlayerName, String rawType) {
+        String type = PlayerBadgeManager.canonicalType(rawType);
+        if (type.isBlank()) {
+            feedback(source, "Unknown type '" + rawType + "'. Valid types: " + PlayerBadgeManager.validTypesText());
+            return 0;
+        }
+        BadgeTarget target = badgeTarget(source, rawPlayerName);
+        feedback(source, "Preview only: " + target.name() + " would show [" + type.toUpperCase(Locale.ROOT) + "] " + target.name() + ".");
+        feedback(source, "Apply with: /b set " + target.name() + " " + type.toLowerCase(Locale.ROOT));
         return 1;
     }
 
@@ -950,6 +1026,48 @@ public final class CobbleAchievementsMod implements ModInitializer {
             if (!namespaceTyped && id.getPath().startsWith(remaining)) builder.suggest(id.getPath());
         }
         return builder.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestTypes(CommandContext<ServerCommandSource> context, SuggestionsBuilder builder) {
+        return CommandSource.suggestMatching(PlayerBadgeManager.typeLabels(), builder);
+    }
+
+    private static CompletableFuture<Suggestions> suggestPlayers(CommandContext<ServerCommandSource> context, SuggestionsBuilder builder) {
+        List<String> names = new ArrayList<>();
+        for (ServerPlayerEntity player : context.getSource().getServer().getPlayerManager().getPlayerList()) {
+            names.add(player.getGameProfile().getName());
+        }
+        for (AchievementConfig.TargetConfig target : config.targets.values()) {
+            if (target != null && target.name != null && !target.name.isBlank()) names.add(target.name);
+        }
+        for (AchievementConfig.PlayerBadgeConfig badge : config.playerBadges.values()) {
+            if (badge != null && badge.name != null && !badge.name.isBlank()) names.add(badge.name);
+        }
+        return CommandSource.suggestMatching(names.stream().distinct().toList(), builder);
+    }
+
+    private static CompletableFuture<Suggestions> suggestConfiguredAchievementPlayers(CommandContext<ServerCommandSource> context, SuggestionsBuilder builder) {
+        return CommandSource.suggestMatching(config.targets.values().stream()
+            .filter(target -> target != null && target.name != null && !target.name.isBlank())
+            .map(target -> target.name)
+            .distinct()
+            .toList(), builder);
+    }
+
+    private static CompletableFuture<Suggestions> suggestConfiguredBadgePlayers(CommandContext<ServerCommandSource> context, SuggestionsBuilder builder) {
+        return CommandSource.suggestMatching(config.playerBadges.values().stream()
+            .filter(badge -> badge != null && badge.name != null && !badge.name.isBlank())
+            .map(badge -> badge.name)
+            .distinct()
+            .toList(), builder);
+    }
+
+    private static CompletableFuture<Suggestions> suggestConfiguredEliteFourPlayers(CommandContext<ServerCommandSource> context, SuggestionsBuilder builder) {
+        return CommandSource.suggestMatching(config.playerBadges.values().stream()
+            .filter(badge -> badge != null && badge.eliteFour && badge.name != null && !badge.name.isBlank())
+            .map(badge -> badge.name)
+            .distinct()
+            .toList(), builder);
     }
 
     private static int ownerLevel(ServerCommandSource source, int slot, int level) throws CommandSyntaxException {
@@ -1133,5 +1251,11 @@ public final class CobbleAchievementsMod implements ModInitializer {
 
     private static void feedback(ServerCommandSource source, String message) {
         source.sendFeedback(() -> Text.literal("[CobbleAchievements] " + message), false);
+    }
+
+    private static String installedVersion() {
+        return FabricLoader.getInstance().getModContainer(MOD_ID)
+            .map(container -> container.getMetadata().getVersion().getFriendlyString())
+            .orElse("unknown");
     }
 }

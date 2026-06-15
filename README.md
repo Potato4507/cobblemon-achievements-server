@@ -15,6 +15,7 @@ Server-side Fabric mod for Cobblemon 1.7.3 on Minecraft 1.21.1.
 - Elite 4 tags with matching defeat achievements.
 - Owner-only team import presets, including a built-in Ice team.
 - Owner-only client bridge for server snapshots and dashboard team uploads.
+- Short status and preview commands so staff can check setup before changing live tags.
 
 ## Requirements
 
@@ -51,7 +52,7 @@ $env:Path = "$env:JAVA_HOME\bin;$env:Path"
 Install the built jar:
 
 ```powershell
-Copy-Item .\build\libs\cobblemon-achievements-server-0.1.9.jar "C:\Path\To\Your\Server\mods\"
+Copy-Item .\build\libs\cobblemon-achievements-server-0.1.10.jar "C:\Path\To\Your\Server\mods\"
 ```
 
 Then restart the Minecraft server. Do not put this jar in every player's client mods folder; this is a server-side mod.
@@ -67,6 +68,7 @@ Use `/b help` in-game for the quick command guide.
 ```mcfunction
 /b help
 /b types
+/b preview <player> <type>
 /b set <player> <type>
 /b gym <player> on [type]
 /b gym <player> off
@@ -78,6 +80,7 @@ Examples:
 
 ```mcfunction
 /b set Steve ground
+/b preview Steve ground
 /b gym Steve on ground
 /b clear Steve
 ```
@@ -111,6 +114,7 @@ Use `/ach help` in-game for the quick achievement guide.
 
 ```mcfunction
 /ach help
+/ach preview <player> [title]
 /ach <player> [title]
 /ach add <player> [title]
 /ach set <player> [title]
@@ -128,6 +132,7 @@ Examples:
 
 ```mcfunction
 /ach Steve
+/ach preview Steve Defeated the Ground Gym Leader
 /ach Steve Defeated the Ground Gym Leader
 /ach add Steve
 /ach add Steve Defeated the Ground Gym Leader
@@ -138,6 +143,7 @@ Examples:
 Command notes:
 
 - `/ach add <player> [title]` creates the achievement people earn by beating that player.
+- `/ach preview <player> [title]` shows what would be created without saving anything.
 - `/ach <player> [title]` is the shortest OP setup form.
 - Titles can have spaces. Quotes are optional; `/ach title Steve "Ground Gym Badge"` and `/ach title Steve Ground Gym Badge` both work.
 - Extra spaces around titles are cleaned up automatically.
@@ -153,6 +159,7 @@ Use `/e4 help` in-game for the quick Elite 4 guide.
 
 ```mcfunction
 /e4 help
+/e4 preview <player> <type> [title]
 /e4 <player> <type> [title]
 /e4 title <player> <title>
 /e4 remove <player>
@@ -163,6 +170,7 @@ Examples:
 
 ```mcfunction
 /e4 Steve ice
+/e4 preview Steve ice
 /e4 Steve ice Defeated Steve of the Ice Elite Four
 /e4 title Steve Defeated the Ice Elite Four
 /e4 remove Steve
@@ -171,6 +179,7 @@ Examples:
 Notes:
 
 - `/e4 <player> <type> [title]` creates both the Elite 4 player-list tag and the defeat achievement.
+- `/e4 preview <player> <type> [title]` shows the tag, title, and ID without saving anything.
 - The visible player-list/nameplate prefix is `Elite 4 <type> <name>`, for example `Elite 4 Dragon Steve`.
 - Titles can have spaces; quotes are optional.
 - Elite 4 setup commands require OP permission.
@@ -223,6 +232,8 @@ The outside-Minecraft dashboard runs locally on your PC and sends small command 
 
 ```mcfunction
 /cach help
+/ca status
+/cach status
 /cach reload
 /cach snapshot now
 /cach snapshot toclient

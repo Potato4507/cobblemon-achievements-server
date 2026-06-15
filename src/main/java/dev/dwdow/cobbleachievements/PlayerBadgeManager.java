@@ -9,6 +9,7 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -70,6 +71,15 @@ public final class PlayerBadgeManager {
             builder.append(TYPES[index].label());
         }
         return builder.toString();
+    }
+
+    public static List<String> typeLabels() {
+        List<String> labels = new java.util.ArrayList<>();
+        for (TypeInfo type : TYPES) {
+            labels.add(type.label());
+            labels.add(type.key());
+        }
+        return labels;
     }
 
     public static void applyAll(MinecraftServer server, AchievementConfig config) {
