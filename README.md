@@ -51,7 +51,7 @@ $env:Path = "$env:JAVA_HOME\bin;$env:Path"
 Install the built jar:
 
 ```powershell
-Copy-Item .\build\libs\cobblemon-achievements-server-0.1.8.jar "C:\Path\To\Your\Server\mods\"
+Copy-Item .\build\libs\cobblemon-achievements-server-0.1.9.jar "C:\Path\To\Your\Server\mods\"
 ```
 
 Then restart the Minecraft server. Do not put this jar in every player's client mods folder; this is a server-side mod.
@@ -167,7 +167,7 @@ Examples:
 Notes:
 
 - `/e4 <player> <type> [title]` creates both the Elite 4 player-list tag and the defeat achievement.
-- The visible prefix is `[E4] [TYPE]`.
+- The visible player-list/nameplate prefix is `Elite 4 <type> <name>`, for example `Elite 4 Dragon Steve`.
 - Titles can have spaces; quotes are optional.
 - Elite 4 setup commands require OP permission.
 

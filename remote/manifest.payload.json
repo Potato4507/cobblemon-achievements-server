@@ -1,13 +1,13 @@
 {
     "schemaVersion":  1,
-    "latestModVersion":  "0.1.8",
+    "latestModVersion":  "0.1.9",
     "requiredModVersion":  "0.1.0",
-    "message":  "Cobblemon Achievements Server 0.1.8 safe staged updater is available. This migration intentionally does not auto-install; manually install this jar once on Modrinth, then future updates stage safely.",
+    "message":  "Cobblemon Achievements Server 0.1.9 updates Elite 4 tags to display as Elite 4 Type Name. Manual Modrinth jar install is still required.",
     "downloadUrl":  "",
     "downloadBase64Chunks":  [
 
                              ],
-    "downloadSha256":  "a8e6540afb8e683750b55a4879c1de668a01d58f54413991af9db91a3da48c3d",
+    "downloadSha256":  "b625681d0c9ea4624272fc58b61c02e4efb487655fafdbf4745e149c7470a742",
     "files":  [
 
               ]

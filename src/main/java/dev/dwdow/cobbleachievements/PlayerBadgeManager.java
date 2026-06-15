@@ -153,7 +153,14 @@ public final class PlayerBadgeManager {
     private static MutableText prefix(TypeInfo type, boolean gymLeader, boolean eliteFour) {
         MutableText text = Text.literal("");
         if (eliteFour) {
-            text.append(Text.literal("[E4] ").styled(style -> style.withColor(0xB388FF).withBold(true)));
+            text.append(Text.literal("Elite 4 ").styled(style -> style.withColor(0xB388FF).withBold(true)));
+            if (type != null) {
+                text.append(Text.literal(type.label() + " ").styled(style -> style.withColor(type.rgb()).withBold(true)));
+            }
+            if (gymLeader) {
+                text.append(Text.literal("Gym Leader ").styled(style -> style.withColor(0xFFD166).withBold(true)));
+            }
+            return text;
         }
         if (gymLeader) {
             text.append(Text.literal("[GYM] ").styled(style -> style.withColor(0xFFD166).withBold(true)));
