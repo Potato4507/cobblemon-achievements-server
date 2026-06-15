@@ -56,6 +56,10 @@ Copy-Item .\build\libs\cobblemon-achievements-server-0.1.9.jar "C:\Path\To\Your\
 
 Then restart the Minecraft server. Do not put this jar in every player's client mods folder; this is a server-side mod.
 
+## Documentation
+
+- Public/player and staff guide: [docs/PUBLIC-DOCUMENTATION.md](docs/PUBLIC-DOCUMENTATION.md)
+
 ## Short Badge Commands
 
 Use `/b help` in-game for the quick command guide.
