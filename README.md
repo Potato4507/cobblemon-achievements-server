@@ -9,7 +9,7 @@ Server-side Fabric mod for Cobblemon 1.7.3 on Minecraft 1.21.1.
 - Server-side Cobblemon battle victory checks.
 - Snapshot export of every online player's party and PC Pokemon.
 - Export to local JSON files, an HTTP endpoint, or GitHub Contents API.
-- Signed remote manifest support for GitHub/IPFS-style data and update checks.
+- Signed remote manifest support for GitHub/IPFS-style data and safe staged update checks.
 - Server-side player list/nameplate badges using vanilla scoreboard teams.
 - Pokemon type badges and gym leader tags that work without a client-side install.
 - Elite 4 tags with matching defeat achievements.
@@ -51,7 +51,7 @@ $env:Path = "$env:JAVA_HOME\bin;$env:Path"
 Install the built jar:
 
 ```powershell
-Copy-Item .\build\libs\cobblemon-achievements-server-0.1.7.jar "C:\Path\To\Your\Server\mods\"
+Copy-Item .\build\libs\cobblemon-achievements-server-0.1.8.jar "C:\Path\To\Your\Server\mods\"
 ```
 
 Then restart the Minecraft server. Do not put this jar in every player's client mods folder; this is a server-side mod.
@@ -246,8 +246,11 @@ The outside-Minecraft dashboard runs locally on your PC and sends small command 
 - The default GitHub raw manifest URL is already configured:
   `https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/manifest.signed.json`
 - Put the new jar URL in `downloadUrl`, or put base64 chunk URLs in `downloadBase64Chunks`.
-- The mod verifies `downloadSha256` before using a downloaded jar.
+- The mod verifies the Ed25519 manifest signature, requires HTTPS URLs, checks `downloadSha256`, validates the downloaded jar metadata, and enforces size limits before staging an update.
+- The mod does **not** overwrite the running server jar automatically. Verified updates are staged under `<server game dir>/cobblemon-achievements-remote/updates/`.
+- On Modrinth hosting, stop the server, replace the old `cobblemon-achievements-server-*.jar` in `mods`, then start the server again. The staged folder includes `INSTALL-README.txt`, `install-staged-update.ps1`, and `install-staged-update.sh` for manual installs.
 - Add fallback URLs to `remoteManifestUrls` in `config/cobblemon-achievements-server.json`.
+- `remoteUpdateDownloadEnabled` now means "download and stage verified updates"; it does not mean live auto-install.
 - The unsigned payload lives at `remote/manifest.payload.json`.
 - Sign it with `tools/sign-manifest.mjs`.
 - Keep `local-secrets/manifest-private-key.pem` private. It is ignored by git.

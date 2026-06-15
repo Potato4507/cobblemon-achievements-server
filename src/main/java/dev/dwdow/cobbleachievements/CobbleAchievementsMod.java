@@ -982,9 +982,10 @@ public final class CobbleAchievementsMod implements ModInitializer {
         if (!status.checkedAt().isBlank()) feedback(source, "Checked: " + status.checkedAt());
         if (!status.installedModVersion().isBlank()) feedback(source, "Installed version: " + status.installedModVersion());
         if (!status.latestModVersion().isBlank()) feedback(source, "Latest version: " + status.latestModVersion());
-        if (!status.downloadedUpdatePath().isBlank()) feedback(source, "Downloaded update: " + status.downloadedUpdatePath());
+        if (!status.downloadedUpdatePath().isBlank()) feedback(source, "Staged verified update: " + status.downloadedUpdatePath());
         if (!status.installedUpdatePath().isBlank()) feedback(source, "Installed update: " + status.installedUpdatePath());
-        if (status.updateAvailable()) feedback(source, "Restart required to load the update.");
+        if (status.updateAvailable() && status.installedUpdatePath().isBlank()) feedback(source, "Update available. The running jar was not changed automatically.");
+        if (status.updateAvailable() && !status.installedUpdatePath().isBlank()) feedback(source, "Restart required to load the update.");
     }
 
     private static boolean startRemoteRefresh(MinecraftServer server, ServerCommandSource source, boolean manual) {
