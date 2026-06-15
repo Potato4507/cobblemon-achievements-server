@@ -35,6 +35,9 @@ public final class AchievementConfig {
         "https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/manifest.signed.json"
     ));
     public Map<String, TargetConfig> targets = new LinkedHashMap<>();
+    public boolean playerBadgesEnabled = true;
+    public boolean playerBadgesOverrideExistingTeams = false;
+    public Map<String, PlayerBadgeConfig> playerBadges = new LinkedHashMap<>();
 
     public static AchievementConfig load() {
         if (!Files.exists(PATH)) {
@@ -47,10 +50,19 @@ public final class AchievementConfig {
             AchievementConfig config = GSON.fromJson(json, AchievementConfig.class);
             if (config == null) config = new AchievementConfig();
             if (config.targets == null) config.targets = new LinkedHashMap<>();
+            if (config.playerBadges == null) config.playerBadges = new LinkedHashMap<>();
             if (config.remoteManifestUrls == null) config.remoteManifestUrls = new ArrayList<>();
             config.save();
             return config;
-        } catch (Exception ignored) {
+        } catch (Exception error) {
+            CobbleAchievementsMod.LOGGER.warn("Could not read config {}; writing a fresh default config.", PATH, error);
+            try {
+                if (Files.exists(PATH)) {
+                    Files.copy(PATH, PATH.resolveSibling(PATH.getFileName() + ".broken"));
+                }
+            } catch (IOException backupError) {
+                CobbleAchievementsMod.LOGGER.warn("Could not back up broken config {}", PATH, backupError);
+            }
             AchievementConfig config = new AchievementConfig();
             config.save();
             return config;
@@ -61,7 +73,8 @@ public final class AchievementConfig {
         try {
             Files.createDirectories(PATH.getParent());
             Files.writeString(PATH, GSON.toJson(this) + "\n", StandardCharsets.UTF_8);
-        } catch (IOException ignored) {
+        } catch (IOException error) {
+            CobbleAchievementsMod.LOGGER.warn("Could not save config {}", PATH, error);
         }
     }
 
@@ -107,6 +120,27 @@ public final class AchievementConfig {
         public static String simpleId(String value) {
             String simple = value == null ? "" : value.toLowerCase().replaceAll("[^a-z0-9._-]+", "_");
             return simple.isBlank() ? "target" : simple;
+        }
+    }
+
+    public static final class PlayerBadgeConfig {
+        public String uuid = "";
+        public String name = "";
+        public String type = "";
+        public boolean gymLeader = false;
+        public boolean eliteFour = false;
+        public boolean active = true;
+
+        public PlayerBadgeConfig() {
+        }
+
+        public PlayerBadgeConfig(ServerPlayerEntity player, String type) {
+            this.uuid = player.getUuidAsString();
+            this.name = player.getGameProfile().getName();
+            this.type = type == null ? "" : type;
+            this.gymLeader = false;
+            this.eliteFour = false;
+            this.active = true;
         }
     }
 }

@@ -33,6 +33,15 @@ public final class OptimizerTeamImporter {
 
     public static Result importTeam(ServerPlayerEntity player, String rawPath) throws Exception {
         JsonObject root = JsonParser.parseString(Files.readString(Path.of(rawPath), StandardCharsets.UTF_8)).getAsJsonObject();
+        return importTeam(player, root);
+    }
+
+    public static Result importTeamJson(ServerPlayerEntity player, String json) {
+        JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+        return importTeam(player, root);
+    }
+
+    public static Result importTeam(ServerPlayerEntity player, JsonObject root) {
         JsonArray team = findTeam(root);
         if (team == null || team.isEmpty()) return new Result(0, 0, "No team array found.");
 
