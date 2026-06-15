@@ -1,0 +1,159 @@
+{
+  "name": "Owner Ice Monotype",
+  "format": "Cobblemon 1.21.1",
+  "team": [
+    {
+      "species": "Ninetales-Alola",
+      "item": "Light Clay",
+      "ability": "Snow Warning",
+      "nature": "Timid",
+      "ivs": {
+        "hp": 31,
+        "atk": 0,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "evs": {
+        "hp": 252,
+        "def": 4,
+        "spe": 252
+      },
+      "moves": [
+        "Aurora Veil",
+        "Freeze-Dry",
+        "Moonblast",
+        "Encore"
+      ]
+    },
+    {
+      "species": "Baxcalibur",
+      "item": "Loaded Dice",
+      "ability": "Thermal Exchange",
+      "nature": "Jolly",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 0,
+        "spd": 31,
+        "spe": 31
+      },
+      "evs": {
+        "atk": 252,
+        "spd": 4,
+        "spe": 252
+      },
+      "moves": [
+        "Icicle Spear",
+        "Glaive Rush",
+        "Earthquake",
+        "Dragon Dance"
+      ],
+      "gimmicks": {
+        "dynamax": true
+      }
+    },
+    {
+      "species": "Mamoswine",
+      "item": "Focus Sash",
+      "ability": "Thick Fat",
+      "nature": "Adamant",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 0,
+        "spd": 31,
+        "spe": 31
+      },
+      "evs": {
+        "atk": 252,
+        "def": 4,
+        "spe": 252
+      },
+      "moves": [
+        "Earthquake",
+        "Icicle Crash",
+        "Ice Shard",
+        "Stealth Rock"
+      ]
+    },
+    {
+      "species": "Weavile",
+      "item": "Life Orb",
+      "ability": "Pressure",
+      "nature": "Jolly",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 0,
+        "spd": 31,
+        "spe": 31
+      },
+      "evs": {
+        "atk": 252,
+        "def": 4,
+        "spe": 252
+      },
+      "moves": [
+        "Triple Axel",
+        "Knock Off",
+        "Ice Shard",
+        "Swords Dance"
+      ]
+    },
+    {
+      "species": "Rotom-Frost",
+      "item": "Choice Scarf",
+      "ability": "Levitate",
+      "nature": "Timid",
+      "ivs": {
+        "hp": 31,
+        "atk": 0,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "evs": {
+        "spa": 252,
+        "spd": 4,
+        "spe": 252
+      },
+      "moves": [
+        "Blizzard",
+        "Thunderbolt",
+        "Volt Switch",
+        "Trick"
+      ]
+    },
+    {
+      "species": "Articuno",
+      "item": "Heavy-Duty Boots",
+      "ability": "Pressure",
+      "nature": "Timid",
+      "ivs": {
+        "hp": 31,
+        "atk": 0,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "evs": {
+        "hp": 248,
+        "spa": 8,
+        "spe": 252
+      },
+      "moves": [
+        "Freeze-Dry",
+        "Hurricane",
+        "Roost",
+        "U-turn"
+      ]
+    }
+  ]
+}

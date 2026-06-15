@@ -119,6 +119,7 @@ public final class AchievementConfig {
         public String name = "";
         public String type = "";
         public boolean gymLeader = false;
+        public boolean eliteFour = false;
         public boolean active = true;
 
         public PlayerBadgeConfig() {
@@ -129,6 +130,7 @@ public final class AchievementConfig {
             this.name = player.getGameProfile().getName();
             this.type = type == null ? "" : type;
             this.gymLeader = false;
+            this.eliteFour = false;
             this.active = true;
         }
     }

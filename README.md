@@ -12,6 +12,8 @@ Server-side Fabric mod for Cobblemon 1.7.3 on Minecraft 1.21.1.
 - Signed remote manifest support for GitHub/IPFS-style data and update checks.
 - Server-side player list/nameplate badges using vanilla scoreboard teams.
 - Pokemon type badges and gym leader tags that work without a client-side install.
+- Elite 4 tags with matching defeat achievements.
+- Owner-only team import presets, including a built-in Ice team.
 
 ## Requirements
 
@@ -48,7 +50,7 @@ $env:Path = "$env:JAVA_HOME\bin;$env:Path"
 Install the built jar:
 
 ```powershell
-Copy-Item .\build\libs\cobblemon-achievements-server-0.1.4.jar "C:\Path\To\Your\Server\mods\"
+Copy-Item .\build\libs\cobblemon-achievements-server-0.1.5.jar "C:\Path\To\Your\Server\mods\"
 ```
 
 Then restart the Minecraft server. Do not put this jar in every player's client mods folder; this is a server-side mod.
@@ -139,6 +141,59 @@ Command notes:
 - `/ach on`, `/ach off`, `/ach enable`, and `/ach disable` let a configured target player control whether people can earn their achievement.
 - Achievement commands accept normal player names. If the player is offline, the target migrates to their UUID when they next battle.
 - Advanced ID override: `/ach id <player> <id> [title]`.
+
+## Elite 4 Commands
+
+Use `/e4 help` in-game for the quick Elite 4 guide.
+
+```mcfunction
+/e4 help
+/e4 <player> <type> [title]
+/e4 title <player> <title>
+/e4 remove <player>
+/e4 list
+```
+
+Examples:
+
+```mcfunction
+/e4 Steve ice
+/e4 Steve ice Defeated Steve of the Ice Elite Four
+/e4 title Steve Defeated the Ice Elite Four
+/e4 remove Steve
+```
+
+Notes:
+
+- `/e4 <player> <type> [title]` creates both the Elite 4 player-list tag and the defeat achievement.
+- The visible prefix is `[E4] [TYPE]`.
+- Titles can have spaces; quotes are optional.
+- Elite 4 setup commands require OP permission.
+
+## Owner Team Import
+
+Use `/team help` in-game for the quick import guide.
+
+```mcfunction
+/team ice
+/team import <preset-or-json-path>
+/team list
+```
+
+Examples:
+
+```mcfunction
+/team ice
+/team import ice
+/team import D:\teams\my-team.json
+```
+
+Notes:
+
+- Team import is owner-only and is locked to the built-in owner UUID.
+- The built-in preset is `ice`.
+- Pokemon import into your party first, then overflow to your PC if the party is full.
+- JSON imports accept the same optimizer-style `team` array used by the built-in preset.
 
 ## Other Commands
 

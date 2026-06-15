@@ -38,6 +38,7 @@ public final class PlayerBadgeManager {
     };
     private static final Map<String, TypeInfo> TYPES_BY_KEY = new LinkedHashMap<>();
     private static final String GYM_ONLY_TEAM = "ca_gym";
+    private static final String ELITE_ONLY_TEAM = "ca_e4";
 
     static {
         for (TypeInfo type : TYPES) {
@@ -98,10 +99,10 @@ public final class PlayerBadgeManager {
             return;
         }
         TypeInfo type = type(badge.type);
-        if (current != null && current != ensureTeam(scoreboard, type, badge.gymLeader) && !isBadgeTeam(scoreboard, current) && !config.playerBadgesOverrideExistingTeams) {
+        if (current != null && current != ensureTeam(scoreboard, type, badge.gymLeader, badge.eliteFour) && !isBadgeTeam(scoreboard, current) && !config.playerBadgesOverrideExistingTeams) {
             return;
         }
-        Team team = ensureTeam(scoreboard, type, badge.gymLeader);
+        Team team = ensureTeam(scoreboard, type, badge.gymLeader, badge.eliteFour);
         if (current != team) {
             scoreboard.addScoreHolderToTeam(scoreHolderName, team);
         }
@@ -136,21 +137,24 @@ public final class PlayerBadgeManager {
         return badge;
     }
 
-    private static Team ensureTeam(Scoreboard scoreboard, TypeInfo type, boolean gymLeader) {
-        String name = teamName(type, gymLeader);
+    private static Team ensureTeam(Scoreboard scoreboard, TypeInfo type, boolean gymLeader, boolean eliteFour) {
+        String name = teamName(type, gymLeader, eliteFour);
         Team team = scoreboard.getTeam(name);
         if (team == null) {
             team = scoreboard.addTeam(name);
         }
         team.setDisplayName(Text.literal(name));
-        team.setPrefix(prefix(type, gymLeader));
+        team.setPrefix(prefix(type, gymLeader, eliteFour));
         team.setSuffix(Text.literal(""));
         team.setColor(type == null ? Formatting.GOLD : type.formatting());
         return team;
     }
 
-    private static MutableText prefix(TypeInfo type, boolean gymLeader) {
+    private static MutableText prefix(TypeInfo type, boolean gymLeader, boolean eliteFour) {
         MutableText text = Text.literal("");
+        if (eliteFour) {
+            text.append(Text.literal("[E4] ").styled(style -> style.withColor(0xB388FF).withBold(true)));
+        }
         if (gymLeader) {
             text.append(Text.literal("[GYM] ").styled(style -> style.withColor(0xFFD166).withBold(true)));
         }
@@ -165,9 +169,12 @@ public final class PlayerBadgeManager {
         Team current = scoreboard.getScoreHolderTeam(scoreHolderName);
         if (current == null) return;
         removeFromTeam(scoreboard, scoreHolderName, current, GYM_ONLY_TEAM);
+        removeFromTeam(scoreboard, scoreHolderName, current, ELITE_ONLY_TEAM);
         for (TypeInfo type : TYPES) {
-            removeFromTeam(scoreboard, scoreHolderName, current, teamName(type, false));
-            removeFromTeam(scoreboard, scoreHolderName, current, teamName(type, true));
+            removeFromTeam(scoreboard, scoreHolderName, current, teamName(type, false, false));
+            removeFromTeam(scoreboard, scoreHolderName, current, teamName(type, true, false));
+            removeFromTeam(scoreboard, scoreHolderName, current, teamName(type, false, true));
+            removeFromTeam(scoreboard, scoreHolderName, current, teamName(type, true, true));
         }
     }
 
@@ -181,16 +188,23 @@ public final class PlayerBadgeManager {
     private static boolean isBadgeTeam(Scoreboard scoreboard, Team team) {
         if (team == null) return false;
         if (scoreboard.getTeam(GYM_ONLY_TEAM) == team) return true;
+        if (scoreboard.getTeam(ELITE_ONLY_TEAM) == team) return true;
         for (TypeInfo type : TYPES) {
-            if (scoreboard.getTeam(teamName(type, false)) == team) return true;
-            if (scoreboard.getTeam(teamName(type, true)) == team) return true;
+            if (scoreboard.getTeam(teamName(type, false, false)) == team) return true;
+            if (scoreboard.getTeam(teamName(type, true, false)) == team) return true;
+            if (scoreboard.getTeam(teamName(type, false, true)) == team) return true;
+            if (scoreboard.getTeam(teamName(type, true, true)) == team) return true;
         }
         return false;
     }
 
-    private static String teamName(TypeInfo type, boolean gymLeader) {
-        if (type == null) return GYM_ONLY_TEAM;
-        return "ca_" + type.teamKey() + (gymLeader ? "_g" : "");
+    private static String teamName(TypeInfo type, boolean gymLeader, boolean eliteFour) {
+        if (type == null) {
+            if (eliteFour) return ELITE_ONLY_TEAM;
+            return GYM_ONLY_TEAM;
+        }
+        String suffix = (gymLeader ? "g" : "") + (eliteFour ? "e" : "");
+        return "ca_" + type.teamKey() + (suffix.isBlank() ? "" : "_" + suffix);
     }
 
     private static TypeInfo type(String rawType) {

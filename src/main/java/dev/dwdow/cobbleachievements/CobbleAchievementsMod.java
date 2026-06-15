@@ -30,6 +30,10 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Box;
 
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -155,7 +159,9 @@ public final class CobbleAchievementsMod implements ModInitializer {
                         removeTarget(context.getSource(), EntityArgumentType.getPlayer(context, "player")))))
                     .then(literal("list").executes(context -> listTargets(context.getSource()))))
                 .then(achievementCommand("ach"))
+                .then(eliteFourCommand("e4"))
                 .then(badgeCommand("badge").requires(config::canManageTargets))
+                .then(teamCommand("team").requires(config::isOwner))
                 .then(literal("snapshot")
                     .then(literal("now").requires(config::canManageTargets).executes(context -> {
                         exportSnapshot(context.getSource().getServer());
@@ -195,6 +201,11 @@ public final class CobbleAchievementsMod implements ModInitializer {
             dispatcher.register(badgeCommand("typebadge").requires(config::canManageTargets));
             dispatcher.register(achievementCommand("ach"));
             dispatcher.register(achievementCommand("achievement"));
+            dispatcher.register(eliteFourCommand("e4"));
+            dispatcher.register(eliteFourCommand("elite4"));
+            dispatcher.register(eliteFourCommand("elitefour"));
+            dispatcher.register(teamCommand("team").requires(config::isOwner));
+            dispatcher.register(teamCommand("teams").requires(config::isOwner));
         });
     }
 
@@ -298,6 +309,220 @@ public final class CobbleAchievementsMod implements ModInitializer {
                 addAchievement(context.getSource(), StringArgumentType.getString(context, "player"), ""))
                 .then(argument("title", StringArgumentType.greedyString()).executes(context ->
                     addAchievement(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "title")))));
+    }
+
+    private static LiteralArgumentBuilder<ServerCommandSource> eliteFourCommand(String name) {
+        return literal(name)
+            .executes(context -> eliteFourHelp(context.getSource()))
+            .then(literal("help").executes(context -> eliteFourHelp(context.getSource())))
+            .then(literal("add").requires(config::canManageTargets)
+                .then(argument("player", StringArgumentType.word())
+                    .then(argument("type", StringArgumentType.word()).executes(context ->
+                        setEliteFour(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "type"), ""))
+                        .then(argument("title", StringArgumentType.greedyString()).executes(context ->
+                            setEliteFour(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "type"), StringArgumentType.getString(context, "title")))))))
+            .then(literal("set").requires(config::canManageTargets)
+                .then(argument("player", StringArgumentType.word())
+                    .then(argument("type", StringArgumentType.word()).executes(context ->
+                        setEliteFour(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "type"), ""))
+                        .then(argument("title", StringArgumentType.greedyString()).executes(context ->
+                            setEliteFour(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "type"), StringArgumentType.getString(context, "title")))))))
+            .then(literal("title").requires(config::canManageTargets)
+                .then(argument("player", StringArgumentType.word())
+                    .then(argument("title", StringArgumentType.greedyString()).executes(context ->
+                        setEliteFourTitle(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "title"))))))
+            .then(literal("remove").requires(config::canManageTargets)
+                .then(argument("player", StringArgumentType.word()).executes(context ->
+                    removeEliteFour(context.getSource(), StringArgumentType.getString(context, "player")))))
+            .then(literal("clear").requires(config::canManageTargets)
+                .then(argument("player", StringArgumentType.word()).executes(context ->
+                    removeEliteFour(context.getSource(), StringArgumentType.getString(context, "player")))))
+            .then(literal("list").requires(config::canManageTargets).executes(context -> listEliteFour(context.getSource())))
+            .then(literal("ls").requires(config::canManageTargets).executes(context -> listEliteFour(context.getSource())))
+            .then(argument("player", StringArgumentType.word()).requires(config::canManageTargets)
+                .then(argument("type", StringArgumentType.word()).executes(context ->
+                    setEliteFour(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "type"), ""))
+                    .then(argument("title", StringArgumentType.greedyString()).executes(context ->
+                        setEliteFour(context.getSource(), StringArgumentType.getString(context, "player"), StringArgumentType.getString(context, "type"), StringArgumentType.getString(context, "title"))))));
+    }
+
+    private static int eliteFourHelp(ServerCommandSource source) {
+        feedback(source, "Elite 4 help:");
+        feedback(source, "/e4 <player> <type> [title] - set E4 tag and achievement. OP only.");
+        feedback(source, "/e4 title <player> <title> - change the achievement title. OP only.");
+        feedback(source, "/e4 remove <player> - remove E4 tag and achievement. OP only.");
+        feedback(source, "/e4 list - show Elite 4 entries. OP only.");
+        feedback(source, "Example: /e4 Steve ice");
+        feedback(source, "Example: /e4 Steve ice Defeated Steve of the Ice Elite Four");
+        return 1;
+    }
+
+    private static int setEliteFour(ServerCommandSource source, String rawPlayerName, String rawType, String rawTitle) {
+        String type = PlayerBadgeManager.canonicalType(rawType);
+        if (type.isBlank()) {
+            feedback(source, "Unknown type '" + rawType + "'. Run /b types for valid types.");
+            return 0;
+        }
+
+        PlayerTarget playerTarget = playerTarget(source, rawPlayerName);
+        String title = cleanTitle(rawTitle);
+        if (title.isBlank()) title = "Defeated " + playerTarget.name() + " of the " + type + " Elite Four";
+
+        AchievementConfig.TargetConfig target = existingTarget(playerTarget);
+        if (target == null) {
+            target = new AchievementConfig.TargetConfig();
+            target.achievementId = AchievementConfig.TargetConfig.simpleId("elite4_" + type + "_" + playerTarget.name());
+        }
+        target.uuid = playerTarget.uuid();
+        target.name = playerTarget.name();
+        if (target.achievementId == null || target.achievementId.isBlank()) {
+            target.achievementId = AchievementConfig.TargetConfig.simpleId("elite4_" + type + "_" + target.name);
+        }
+        target.title = title;
+        target.active = true;
+        putAchievementTarget(playerTarget, target);
+
+        BadgeTarget badgeTarget = new BadgeTarget(playerTarget.key(), playerTarget.uuid(), playerTarget.name(), playerTarget.online());
+        AchievementConfig.PlayerBadgeConfig badge = existingBadge(badgeTarget);
+        if (badge == null) badge = new AchievementConfig.PlayerBadgeConfig();
+        badge.uuid = badgeTarget.uuid();
+        badge.name = badgeTarget.name();
+        badge.type = type;
+        badge.eliteFour = true;
+        badge.active = true;
+        putBadge(badgeTarget, badge);
+
+        config.save();
+        applyBadgeTarget(badgeTarget);
+        feedback(source, "Elite 4 set: " + playerTarget.name() + " -> " + type + " | " + title + " (id " + target.achievementId + ").");
+        return 1;
+    }
+
+    private static int setEliteFourTitle(ServerCommandSource source, String rawPlayerName, String rawTitle) {
+        PlayerTarget playerTarget = playerTarget(source, rawPlayerName);
+        BadgeTarget badgeTarget = new BadgeTarget(playerTarget.key(), playerTarget.uuid(), playerTarget.name(), playerTarget.online());
+        AchievementConfig.PlayerBadgeConfig badge = existingBadge(badgeTarget);
+        AchievementConfig.TargetConfig target = existingTarget(playerTarget);
+        if (target == null || !isEliteFourTarget(target, badge)) {
+            feedback(source, "No Elite 4 achievement target found for " + playerTarget.name() + ". Run /e4 " + playerTarget.name() + " <type> first.");
+            return 0;
+        }
+        String title = cleanTitle(rawTitle);
+        if (title.isBlank()) {
+            feedback(source, "Title cannot be blank.");
+            return 0;
+        }
+        target.title = title;
+        putAchievementTarget(playerTarget, target);
+        config.save();
+        feedback(source, "Elite 4 title set for " + playerTarget.name() + ": " + title + ".");
+        return 1;
+    }
+
+    private static int removeEliteFour(ServerCommandSource source, String rawPlayerName) {
+        PlayerTarget playerTarget = playerTarget(source, rawPlayerName);
+        BadgeTarget badgeTarget = new BadgeTarget(playerTarget.key(), playerTarget.uuid(), playerTarget.name(), playerTarget.online());
+        AchievementConfig.PlayerBadgeConfig badge = existingBadge(badgeTarget);
+        AchievementConfig.TargetConfig target = existingTarget(playerTarget);
+        boolean hadBadge = badge != null && badge.eliteFour;
+        boolean hadTarget = target != null && isEliteFourTarget(target, badge);
+
+        if (hadTarget) removeAchievementTarget(playerTarget);
+        if (badge != null) {
+            badge.eliteFour = false;
+            if (badge.gymLeader) putBadge(badgeTarget, badge);
+            else removeBadge(badgeTarget);
+        }
+        config.save();
+        applyBadgeTarget(badgeTarget);
+        feedback(source, hadBadge || hadTarget ? "Removed Elite 4 setup for " + playerTarget.name() + "." : "No Elite 4 setup was found for " + playerTarget.name() + ".");
+        return 1;
+    }
+
+    private static int listEliteFour(ServerCommandSource source) {
+        boolean any = false;
+        for (AchievementConfig.PlayerBadgeConfig badge : config.playerBadges.values()) {
+            if (badge == null || !badge.eliteFour) continue;
+            any = true;
+            String type = badge.type == null || badge.type.isBlank() ? "no type" : badge.type;
+            AchievementConfig.TargetConfig target = targetByName(badge.name);
+            String title = target == null ? "no achievement target" : target.title;
+            feedback(source, badge.name + " -> Elite 4 " + type + " | " + title);
+        }
+        if (!any) feedback(source, "No Elite 4 entries configured.");
+        return 1;
+    }
+
+    private static boolean isEliteFourTarget(AchievementConfig.TargetConfig target, AchievementConfig.PlayerBadgeConfig badge) {
+        if (badge != null && badge.eliteFour) return true;
+        if (target == null || target.achievementId == null) return false;
+        return target.achievementId.toLowerCase().startsWith("elite4_");
+    }
+
+    private static LiteralArgumentBuilder<ServerCommandSource> teamCommand(String name) {
+        return literal(name)
+            .executes(context -> teamHelp(context.getSource()))
+            .then(literal("help").executes(context -> teamHelp(context.getSource())))
+            .then(literal("list").executes(context -> teamList(context.getSource())))
+            .then(literal("ls").executes(context -> teamList(context.getSource())))
+            .then(literal("ice").executes(context -> ownerImportTeam(context.getSource(), "ice")))
+            .then(literal("import")
+                .then(argument("presetOrPath", StringArgumentType.greedyString()).executes(context ->
+                    ownerImportTeam(context.getSource(), StringArgumentType.getString(context, "presetOrPath")))))
+            .then(literal("load")
+                .then(argument("presetOrPath", StringArgumentType.greedyString()).executes(context ->
+                    ownerImportTeam(context.getSource(), StringArgumentType.getString(context, "presetOrPath")))));
+    }
+
+    private static int teamHelp(ServerCommandSource source) {
+        feedback(source, "Team import help:");
+        feedback(source, "/team ice - import the built-in Ice team to your party/PC. Owner only.");
+        feedback(source, "/team import <preset-or-json-path> - import a built-in preset or JSON file. Owner only.");
+        feedback(source, "/team list - show built-in presets.");
+        feedback(source, "Example: /team import ice");
+        feedback(source, "Example: /team import D:\\\\teams\\\\my-team.json");
+        return 1;
+    }
+
+    private static int teamList(ServerCommandSource source) {
+        feedback(source, "Built-in team presets: ice");
+        return 1;
+    }
+
+    private static int ownerImportTeam(ServerCommandSource source, String rawPresetOrPath) throws CommandSyntaxException {
+        ServerPlayerEntity player = source.getPlayerOrThrow();
+        String presetOrPath = cleanCommandText(rawPresetOrPath);
+        if (presetOrPath.isBlank()) presetOrPath = "ice";
+        try {
+            String json = loadTeamJson(presetOrPath);
+            OptimizerTeamImporter.Result result = OptimizerTeamImporter.importTeamJson(player, json);
+            feedback(source, "Imported " + result.imported() + " Pokemon from team '" + presetOrPath + "'.");
+            if (result.imported() < 6) feedback(source, "Only " + result.imported() + "/6 imported. Make party/PC space if needed, then run the command again.");
+            if (result.warnings() > 0) feedback(source, "Import warnings: " + result.warningText());
+            return result.imported() > 0 ? 1 : 0;
+        } catch (Exception error) {
+            feedback(source, "Team import failed: " + error.getMessage());
+            return 0;
+        }
+    }
+
+    private static String loadTeamJson(String presetOrPath) throws Exception {
+        Path directPath = Path.of(presetOrPath);
+        if (Files.exists(directPath) && Files.isRegularFile(directPath)) {
+            return Files.readString(directPath, StandardCharsets.UTF_8);
+        }
+
+        String key = AchievementConfig.TargetConfig.simpleId(presetOrPath);
+        Path configTeamPath = AchievementConfig.path().getParent().resolve("cobblemon-achievements-teams").resolve(key + ".json");
+        if (Files.exists(configTeamPath) && Files.isRegularFile(configTeamPath)) {
+            return Files.readString(configTeamPath, StandardCharsets.UTF_8);
+        }
+
+        String resourcePath = "/teams/" + key + ".json";
+        try (InputStream stream = CobbleAchievementsMod.class.getResourceAsStream(resourcePath)) {
+            if (stream != null) return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+        }
+        throw new IllegalArgumentException("Unknown team preset or JSON path: " + presetOrPath);
     }
 
     private static int achievementHelp(ServerCommandSource source) {
@@ -437,6 +662,14 @@ public final class CobbleAchievementsMod implements ModInitializer {
         return null;
     }
 
+    private static AchievementConfig.TargetConfig targetByName(String name) {
+        if (name == null) return null;
+        for (AchievementConfig.TargetConfig candidate : config.targets.values()) {
+            if (candidate != null && candidate.name != null && candidate.name.equalsIgnoreCase(name)) return candidate;
+        }
+        return null;
+    }
+
     private static void putAchievementTarget(PlayerTarget target, AchievementConfig.TargetConfig achievement) {
         removeAchievementTarget(target);
         config.targets.put(target.key(), achievement);
@@ -469,6 +702,8 @@ public final class CobbleAchievementsMod implements ModInitializer {
         feedback(source, "CobbleAchievements help:");
         feedback(source, "/ach help - easy achievement commands.");
         feedback(source, "/b help - badge/type/gym leader commands.");
+        feedback(source, "/e4 help - Elite 4 tags and defeat achievements.");
+        feedback(source, "/team ice - owner-only Ice team import.");
         feedback(source, "/cach active <on|off> - toggle your target achievement.");
         feedback(source, "/cach target add <player> [id] [title] - add a defeat achievement target. OP only.");
         feedback(source, "/cach target remove <player> - remove a target. OP only.");
@@ -650,7 +885,8 @@ public final class CobbleAchievementsMod implements ModInitializer {
         for (AchievementConfig.PlayerBadgeConfig badge : config.playerBadges.values()) {
             String type = badge.type == null || badge.type.isBlank() ? "no type" : badge.type;
             String status = badge.active ? "active" : "inactive";
-            feedback(source, badge.name + " -> " + (badge.gymLeader ? "Gym Leader, " : "") + type + " (" + status + ")");
+            String role = (badge.eliteFour ? "Elite 4, " : "") + (badge.gymLeader ? "Gym Leader, " : "");
+            feedback(source, badge.name + " -> " + role + type + " (" + status + ")");
         }
         return 1;
     }
