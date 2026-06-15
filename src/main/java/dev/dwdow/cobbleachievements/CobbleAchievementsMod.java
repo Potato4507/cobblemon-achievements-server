@@ -509,6 +509,33 @@ public final class CobbleAchievementsMod implements ModInitializer {
         }
     }
 
+    public static BridgeTeamImportResult importOwnerTeamFromBridge(ServerPlayerEntity player, String rawLabel, String json) {
+        if (config == null || !config.isOwner(player)) {
+            return new BridgeTeamImportResult(false, "Team upload refused: this bridge is owner-only.");
+        }
+        String label = cleanCommandText(rawLabel);
+        if (label.isBlank()) label = "dashboard team";
+        if (json == null || json.isBlank()) {
+            return new BridgeTeamImportResult(false, "Team upload failed: empty team JSON.");
+        }
+        try {
+            OptimizerTeamImporter.Result result = OptimizerTeamImporter.importTeamJson(player, json);
+            StringBuilder message = new StringBuilder("Imported " + result.imported() + " Pokemon from " + label + ".");
+            if (result.imported() < 6) message.append(" Only ").append(result.imported()).append("/6 imported; check party/PC space.");
+            if (result.warnings() > 0) message.append(" Warnings: ").append(result.warningText());
+            return new BridgeTeamImportResult(result.imported() > 0, message.toString());
+        } catch (Exception error) {
+            return new BridgeTeamImportResult(false, "Team upload failed: " + error.getMessage());
+        }
+    }
+
+    public record BridgeTeamImportResult(boolean ok, String message) {
+    }
+
+    public static boolean isOwnerBridgePlayer(ServerPlayerEntity player) {
+        return config != null && config.isOwner(player);
+    }
+
     private static String loadTeamJson(String presetOrPath) throws Exception {
         Path directPath = Path.of(presetOrPath);
         if (Files.exists(directPath) && Files.isRegularFile(directPath)) {

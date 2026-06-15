@@ -14,6 +14,7 @@ Server-side Fabric mod for Cobblemon 1.7.3 on Minecraft 1.21.1.
 - Pokemon type badges and gym leader tags that work without a client-side install.
 - Elite 4 tags with matching defeat achievements.
 - Owner-only team import presets, including a built-in Ice team.
+- Owner-only client bridge for server snapshots and dashboard team uploads.
 
 ## Requirements
 
@@ -50,7 +51,7 @@ $env:Path = "$env:JAVA_HOME\bin;$env:Path"
 Install the built jar:
 
 ```powershell
-Copy-Item .\build\libs\cobblemon-achievements-server-0.1.6.jar "C:\Path\To\Your\Server\mods\"
+Copy-Item .\build\libs\cobblemon-achievements-server-0.1.7.jar "C:\Path\To\Your\Server\mods\"
 ```
 
 Then restart the Minecraft server. Do not put this jar in every player's client mods folder; this is a server-side mod.
@@ -194,6 +195,25 @@ Notes:
 - The built-in preset is `ice`.
 - Pokemon import into your party first, then overflow to your PC if the party is full.
 - JSON imports accept the same optimizer-style `team` array used by the built-in preset.
+
+## Owner Hub Client Bridge
+
+Version `0.1.7` adds a private bridge for your client-side coach mod and the local Owner Hub dashboard.
+
+What it does:
+
+- `/cach snapshot toclient` can send a full online player snapshot to your client.
+- The client dashboard can request that snapshot without typing the command in-game.
+- The client dashboard can upload a team JSON/import into the server mod.
+- Team uploads are owner-only and still check the configured owner UUID on the server.
+
+The matching client-side coach mod saves snapshots under:
+
+```text
+<Modrinth profile game dir>\cobblemon-owner-hub\snapshots\latest.json
+```
+
+The outside-Minecraft dashboard runs locally on your PC and sends small command files to the client mod. Minecraft still needs to be open and connected to the server for live snapshot requests and team uploads.
 
 ## Other Commands
 
