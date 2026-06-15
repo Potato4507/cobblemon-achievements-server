@@ -1,19 +1,19 @@
 {
     "schemaVersion":  1,
-    "latestModVersion":  "0.1.5",
+    "latestModVersion":  "0.1.6",
     "requiredModVersion":  "0.1.0",
-    "message":  "Cobblemon Achievements Server 0.1.5 Elite 4 tags and Ice team import are available.",
+    "message":  "Cobblemon Achievements Server 0.1.6 owner spawn autocomplete and item giving fixes are available.",
     "downloadUrl":  "",
     "downloadBase64Chunks":  [
-                                 "https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/cobblemon-achievements-server-0.1.5.jar.b64.001",
-                                 "https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/cobblemon-achievements-server-0.1.5.jar.b64.002",
-                                 "https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/cobblemon-achievements-server-0.1.5.jar.b64.003",
-                                 "https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/cobblemon-achievements-server-0.1.5.jar.b64.004",
-                                 "https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/cobblemon-achievements-server-0.1.5.jar.b64.005",
-                                 "https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/cobblemon-achievements-server-0.1.5.jar.b64.006",
-                                 "https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/cobblemon-achievements-server-0.1.5.jar.b64.007"
+                                 "https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/cobblemon-achievements-server-0.1.6.jar.b64.001",
+                                 "https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/cobblemon-achievements-server-0.1.6.jar.b64.002",
+                                 "https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/cobblemon-achievements-server-0.1.6.jar.b64.003",
+                                 "https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/cobblemon-achievements-server-0.1.6.jar.b64.004",
+                                 "https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/cobblemon-achievements-server-0.1.6.jar.b64.005",
+                                 "https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/cobblemon-achievements-server-0.1.6.jar.b64.006",
+                                 "https://raw.githubusercontent.com/Potato4507/cobblemon-achievements-server/main/remote/cobblemon-achievements-server-0.1.6.jar.b64.007"
                              ],
-    "downloadSha256":  "d09c0ba3569302ebaa371479616dc067de58b5c96ad649acdcf4e0fad0a3327f",
+    "downloadSha256":  "1c6100944c527d37f0a539c89126766602e67e30ad5ed3e702b9c24e4c1d54c5",
     "files":  [
 
               ]

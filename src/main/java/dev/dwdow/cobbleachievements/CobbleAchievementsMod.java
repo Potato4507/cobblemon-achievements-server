@@ -7,13 +7,17 @@ import com.cobblemon.mod.common.api.events.CobblemonEvents;
 import com.cobblemon.mod.common.api.events.battles.BattleVictoryEvent;
 import com.cobblemon.mod.common.api.pokemon.PokemonProperties;
 import com.cobblemon.mod.common.api.storage.party.PlayerPartyStore;
+import com.cobblemon.mod.common.command.argument.PokemonPropertiesArgumentType;
 import com.cobblemon.mod.common.entity.pokemon.PokemonEntity;
 import com.cobblemon.mod.common.pokemon.Pokemon;
 import com.google.gson.JsonObject;
+import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.suggestion.Suggestions;
+import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -36,8 +40,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -181,17 +187,14 @@ public final class CobbleAchievementsMod implements ModInitializer {
                         .then(argument("slot", IntegerArgumentType.integer(1, 6))
                             .then(argument("level", IntegerArgumentType.integer(1, 100)).executes(context ->
                                 ownerLevel(context.getSource(), IntegerArgumentType.getInteger(context, "slot") - 1, IntegerArgumentType.getInteger(context, "level"))))))
-                    .then(literal("givepokemon")
-                        .then(argument("properties", StringArgumentType.greedyString()).executes(context ->
-                            ownerGivePokemon(context.getSource(), StringArgumentType.getString(context, "properties")))))
+                    .then(ownerPokemonCommand("givepokemon"))
+                    .then(ownerPokemonCommand("pokemon"))
+                    .then(ownerPokemonCommand("mon"))
                     .then(literal("giveteam")
                         .then(argument("summaryJsonPath", StringArgumentType.greedyString()).executes(context ->
                             ownerGiveTeam(context.getSource(), StringArgumentType.getString(context, "summaryJsonPath")))))
-                    .then(literal("giveitem")
-                        .then(argument("item", StringArgumentType.word()).executes(context ->
-                            ownerGiveItem(context.getSource(), StringArgumentType.getString(context, "item"), 1))
-                        .then(argument("count", IntegerArgumentType.integer(1, 6400)).executes(context ->
-                            ownerGiveItem(context.getSource(), StringArgumentType.getString(context, "item"), IntegerArgumentType.getInteger(context, "count"))))))
+                    .then(ownerItemCommand("giveitem"))
+                    .then(ownerItemCommand("item"))
                     .then(literal("catchnear").executes(context -> ownerCatchNear(context.getSource(), 16))
                         .then(argument("radius", IntegerArgumentType.integer(1, 128)).executes(context ->
                             ownerCatchNear(context.getSource(), IntegerArgumentType.getInteger(context, "radius"))))))
@@ -897,6 +900,31 @@ public final class CobbleAchievementsMod implements ModInitializer {
         return 1;
     }
 
+    private static LiteralArgumentBuilder<ServerCommandSource> ownerPokemonCommand(String name) {
+        return literal(name)
+            .then(argument("properties", PokemonPropertiesArgumentType.Companion.properties()).executes(context ->
+                ownerGivePokemon(context.getSource(), PokemonPropertiesArgumentType.Companion.getPokemonProperties(context, "properties"))));
+    }
+
+    private static LiteralArgumentBuilder<ServerCommandSource> ownerItemCommand(String name) {
+        return literal(name)
+            .then(argument("item", StringArgumentType.word()).suggests(CobbleAchievementsMod::suggestItems).executes(context ->
+                ownerGiveItem(context.getSource(), StringArgumentType.getString(context, "item"), 1))
+            .then(argument("count", IntegerArgumentType.integer(1, 6400)).executes(context ->
+                ownerGiveItem(context.getSource(), StringArgumentType.getString(context, "item"), IntegerArgumentType.getInteger(context, "count")))));
+    }
+
+    private static CompletableFuture<Suggestions> suggestItems(CommandContext<ServerCommandSource> context, SuggestionsBuilder builder) {
+        String remaining = builder.getRemainingLowerCase();
+        boolean namespaceTyped = remaining.contains(":");
+        for (Identifier id : Registries.ITEM.getIds()) {
+            String full = id.toString();
+            if (full.startsWith(remaining)) builder.suggest(full);
+            if (!namespaceTyped && id.getPath().startsWith(remaining)) builder.suggest(id.getPath());
+        }
+        return builder.buildFuture();
+    }
+
     private static int ownerLevel(ServerCommandSource source, int slot, int level) throws CommandSyntaxException {
         ServerPlayerEntity player = source.getPlayerOrThrow();
         PlayerPartyStore party = Cobblemon.INSTANCE.getStorage().getParty(player);
@@ -965,12 +993,19 @@ public final class CobbleAchievementsMod implements ModInitializer {
         return true;
     }
 
-    private static int ownerGivePokemon(ServerCommandSource source, String rawProperties) throws CommandSyntaxException {
+    private static int ownerGivePokemon(ServerCommandSource source, PokemonProperties properties) throws CommandSyntaxException {
         ServerPlayerEntity player = source.getPlayerOrThrow();
-        Pokemon pokemon = PokemonProperties.Companion.parse(rawProperties).create(player);
-        boolean added = Cobblemon.INSTANCE.getStorage().getParty(player).add(pokemon);
-        feedback(source, added ? "Added " + pokemon.getDisplayName(false).getString() + "." : "Could not add Pokemon.");
-        return added ? 1 : 0;
+        try {
+            Pokemon pokemon = properties.create(player);
+            pokemon.heal();
+            pokemon.updateAspects();
+            boolean added = Cobblemon.INSTANCE.getStorage().getParty(player).add(pokemon);
+            feedback(source, added ? "Added " + pokemon.getDisplayName(false).getString() + "." : "Could not add Pokemon. Check party/PC space.");
+            return added ? 1 : 0;
+        } catch (Exception error) {
+            feedback(source, "Pokemon spawn failed: " + error.getMessage());
+            return 0;
+        }
     }
 
     private static int ownerGiveTeam(ServerCommandSource source, String summaryJsonPath) throws CommandSyntaxException {
@@ -988,15 +1023,40 @@ public final class CobbleAchievementsMod implements ModInitializer {
 
     private static int ownerGiveItem(ServerCommandSource source, String rawItem, int count) throws CommandSyntaxException {
         ServerPlayerEntity player = source.getPlayerOrThrow();
-        Identifier id = Identifier.tryParse(rawItem.contains(":") ? rawItem : "minecraft:" + rawItem);
-        if (id == null || !Registries.ITEM.containsId(id)) {
-            feedback(source, "Unknown item: " + rawItem);
+        Identifier id = resolveItemId(rawItem);
+        if (id == null) {
+            feedback(source, "Unknown item: " + rawItem + ". Use tab complete, like cobblemon:relic_coin or minecraft:diamond.");
             return 0;
         }
         Item item = Registries.ITEM.get(id);
         player.getInventory().offerOrDrop(new ItemStack(item, count));
         feedback(source, "Gave " + count + " " + id + ".");
         return 1;
+    }
+
+    private static Identifier resolveItemId(String rawItem) {
+        String cleaned = cleanCommandText(rawItem).toLowerCase(Locale.ROOT);
+        if (cleaned.isBlank()) return null;
+
+        Identifier exact = Identifier.tryParse(cleaned);
+        if (exact != null && cleaned.contains(":") && Registries.ITEM.containsId(exact)) return exact;
+
+        if (!cleaned.contains(":")) {
+            Identifier minecraft = Identifier.of("minecraft", cleaned);
+            if (Registries.ITEM.containsId(minecraft)) return minecraft;
+            Identifier cobblemon = Identifier.of("cobblemon", cleaned);
+            if (Registries.ITEM.containsId(cobblemon)) return cobblemon;
+
+            Identifier unique = null;
+            for (Identifier candidate : Registries.ITEM.getIds()) {
+                if (!candidate.getPath().equals(cleaned)) continue;
+                if (unique != null) return null;
+                unique = candidate;
+            }
+            return unique;
+        }
+
+        return exact != null && Registries.ITEM.containsId(exact) ? exact : null;
     }
 
     private static int ownerCatchNear(ServerCommandSource source, int radius) throws CommandSyntaxException {

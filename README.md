@@ -50,7 +50,7 @@ $env:Path = "$env:JAVA_HOME\bin;$env:Path"
 Install the built jar:
 
 ```powershell
-Copy-Item .\build\libs\cobblemon-achievements-server-0.1.5.jar "C:\Path\To\Your\Server\mods\"
+Copy-Item .\build\libs\cobblemon-achievements-server-0.1.6.jar "C:\Path\To\Your\Server\mods\"
 ```
 
 Then restart the Minecraft server. Do not put this jar in every player's client mods folder; this is a server-side mod.
@@ -202,6 +202,8 @@ Notes:
 /cach reload
 /cach snapshot now
 /cach snapshot toclient
+/cach owner pokemon <pokemon-properties>
+/cach owner item <item> [count]
 /cach remote status
 /cach remote refresh
 /cach target add <player> [achievementId] [title]
@@ -210,8 +212,11 @@ Notes:
 ```
 
 - `/cach target ...` is the older advanced achievement command path.
-- `/cach snapshot now` exports the current server snapshot.
+- `/cach snapshot now` exports the current server snapshot to `<server game dir>/cobblemon-achievements-snapshots/latest.json` and a timestamped JSON file in that same folder.
 - `/cach snapshot toclient` sends the full server snapshot to the configured owner's client mod.
+- `/cach owner pokemon <pokemon-properties>` gives you a Pokemon and uses Cobblemon Pokemon autocomplete. Alias: `/cach owner mon`.
+- `/cach owner item <item> [count]` gives you an item and autocompletes registered item IDs. Alias: `/cach owner giveitem`.
+- Item names can be full IDs like `cobblemon:relic_coin`; plain names like `relic_coin` try Minecraft, then Cobblemon, then a unique matching mod item path.
 - `/cach remote status` and `/cach remote refresh` require owner access.
 - `/cach remote refresh` runs in the background so a slow GitHub check will not freeze the server tick thread.
 
